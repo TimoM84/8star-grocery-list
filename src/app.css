@@ -1,0 +1,167 @@
+@import 'tailwindcss';
+
+/* Automatic light/dark theme via system preference. */
+:root {
+	--bg: #f4f5f2;
+	--surface: #ffffff;
+	--surface-2: #eceee9;
+	--surface-3: #e2e5df;
+	--text: #151916;
+	--muted: #586058;
+	--faint: #7d847c;
+	--border: #dcdfd8;
+	--accent: #1d7f46;
+	--accent-strong: #166b3a;
+	--accent-contrast: #ffffff;
+	--accent-soft: #dff0e5;
+	--danger: #c0262d;
+	--danger-soft: #fbe5e5;
+	--warn: #9a5b00;
+	--warn-soft: #fbefd9;
+	--done: #8f968e;
+	--star: #d18a00;
+	--shadow: 0 1px 2px rgb(16 24 16 / 6%), 0 4px 16px rgb(16 24 16 / 6%);
+	--nav-h: 4.25rem;
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #0c0f0d;
+		--surface: #151a16;
+		--surface-2: #1d231e;
+		--surface-3: #262d27;
+		--text: #eef2ec;
+		--muted: #a9b1a8;
+		--faint: #7f877e;
+		--border: #2a312b;
+		--accent: #4cc982;
+		--accent-strong: #6bd697;
+		--accent-contrast: #04210f;
+		--accent-soft: #163322;
+		--danger: #ff7b7b;
+		--danger-soft: #3a1717;
+		--warn: #f2b85b;
+		--warn-soft: #382a12;
+		--done: #697169;
+		--star: #f5b941;
+		--shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 20px rgb(0 0 0 / 35%);
+		color-scheme: dark;
+	}
+}
+
+@theme inline {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-surface-3: var(--surface-3);
+	--color-ink: var(--text);
+	--color-muted: var(--muted);
+	--color-faint: var(--faint);
+	--color-line: var(--border);
+	--color-accent: var(--accent);
+	--color-accent-strong: var(--accent-strong);
+	--color-on-accent: var(--accent-contrast);
+	--color-accent-soft: var(--accent-soft);
+	--color-danger: var(--danger);
+	--color-danger-soft: var(--danger-soft);
+	--color-warn: var(--warn);
+	--color-warn-soft: var(--warn-soft);
+	--color-done: var(--done);
+	--color-star: var(--star);
+	--shadow-card: var(--shadow);
+	--font-sans:
+		system-ui, -apple-system, 'Segoe UI', Roboto, 'Google Sans', 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	-webkit-tap-highlight-color: transparent;
+	background: var(--bg);
+	overscroll-behavior-y: none;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font-sans);
+	font-size: 1rem;
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden;
+	min-height: 100dvh;
+}
+
+button,
+a,
+input,
+label {
+	touch-action: manipulation;
+}
+
+:focus-visible {
+	outline: 3px solid var(--accent);
+	outline-offset: 2px;
+}
+
+/* Text fields show their own focus border/ring. */
+input:focus-visible {
+	outline: none;
+}
+
+input::placeholder {
+	color: var(--faint);
+	opacity: 1;
+}
+
+input[type='search']::-webkit-search-cancel-button {
+	display: none;
+}
+
+/* Safe areas (notches, Android gesture bar). */
+.pt-safe {
+	padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.px-safe {
+	/* Fixed 16px gutter (not rem) so large system font sizes don't eat the content width. */
+	padding-left: max(16px, env(safe-area-inset-left, 0px));
+	padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Space reserved for the bottom navigation. Hidden while typing (keyboard open). */
+.page-bottom-space {
+	padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 1.5rem);
+}
+html.kb-open .page-bottom-space {
+	padding-bottom: 1.5rem;
+}
+html.kb-open .hide-on-kb {
+	display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+@keyframes flash {
+	0% {
+		background-color: var(--accent-soft);
+	}
+	100% {
+		background-color: var(--surface);
+	}
+}
+.flash {
+	animation: flash 1.2s ease-out;
+}

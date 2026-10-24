@@ -1,0 +1,11 @@
+node_modules
+build
+.svelte-kit
+package-lock.json
+test-results
+playwright-report
+screenshots
+static/icons
+data
+*.db
+scratch
