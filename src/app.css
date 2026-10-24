@@ -1,6 +1,16 @@
 @import 'tailwindcss';
 
-/* Automatic light/dark theme via system preference. */
+/* Automatic light/dark theme; runtime colors are injected from APP_PRIMARY_COLOR. */
+:root {
+ --runtime-light-accent: #1d7f46;
+ --runtime-light-strong: #166b3a;
+ --runtime-light-contrast: #ffffff;
+ --runtime-light-soft: #dff0e5;
+ --runtime-dark-accent: #4cc982;
+ --runtime-dark-strong: #6bd697;
+ --runtime-dark-contrast: #04210f;
+ --runtime-dark-soft: #163322;
+}
 :root {
 	--bg: #f4f5f2;
 	--surface: #ffffff;
@@ -10,10 +20,10 @@
 	--muted: #586058;
 	--faint: #7d847c;
 	--border: #dcdfd8;
-	--accent: #1d7f46;
-	--accent-strong: #166b3a;
-	--accent-contrast: #ffffff;
-	--accent-soft: #dff0e5;
+	--accent: var(--runtime-light-accent);
+	--accent-strong: var(--runtime-light-strong);
+	--accent-contrast: var(--runtime-light-contrast);
+	--accent-soft: var(--runtime-light-soft);
 	--danger: #c0262d;
 	--danger-soft: #fbe5e5;
 	--warn: #9a5b00;
@@ -35,10 +45,10 @@
 		--muted: #a9b1a8;
 		--faint: #7f877e;
 		--border: #2a312b;
-		--accent: #4cc982;
-		--accent-strong: #6bd697;
-		--accent-contrast: #04210f;
-		--accent-soft: #163322;
+		--accent: var(--runtime-dark-accent);
+		--accent-strong: var(--runtime-dark-strong);
+		--accent-contrast: var(--runtime-dark-contrast);
+		--accent-soft: var(--runtime-dark-soft);
 		--danger: #ff7b7b;
 		--danger-soft: #3a1717;
 		--warn: #f2b85b;
