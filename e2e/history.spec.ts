@@ -54,22 +54,26 @@ test('exports CSV and JSON', async ({ page }) => {
 	await freshApp(page);
 	await seedPurchases(page.request, 'Koffie', 3, 10, 2);
 	await page.getByTestId('nav-beheer').click();
+	await page.getByTestId('open-gegevens').click();
 
 	const [csv] = await Promise.all([
 		page.waitForEvent('download'),
 		page.getByTestId('export-csv').click()
 	]);
-	expect(csv.suggestedFilename()).toMatch(/^8star-aankopen-.*\.csv$/);
+	expect(csv.suggestedFilename()).toMatch(/^8star-purchases-.*\.csv$/);
 	const text = await (await csv.createReadStream()).toArray();
 	const content = Buffer.concat(text as Buffer[]).toString('utf8');
-	expect(content.split('\r\n')[0]).toContain('product;categorie;lijst;status');
+	expect(content.split('\r\n')[0]).toContain('purchase_id;product_id;product;categorie');
 	expect(content.match(/Koffie;/g)).toHaveLength(3);
 
 	const res = await page.request.get('/api/export?format=json');
 	const json = await res.json();
-	expect(json.cycles).toHaveLength(3);
+	expect(json.format).toBe('8star-grocery-export');
+	expect(json.data.purchaseEvents).toHaveLength(3);
 	expect(json.statistics[0]).toMatchObject({ name: 'Koffie', purchaseCount: 3 });
 
 	const products = await page.request.get('/api/export?format=csv&type=products');
-	expect(await products.text()).toContain('aantal_keer_gekocht');
+	expect(await products.text()).toContain('product_id;product;categorie_id');
+	const stats = await page.request.get('/api/export?format=csv&type=statistics');
+	expect(await stats.text()).toContain('aantal_keer_gekocht');
 });

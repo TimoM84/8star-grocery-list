@@ -9,13 +9,21 @@ function stamp(date = new Date()): string {
 	return date.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
 }
 
+/** Unique file name, even for several backups within the same second. */
+function backupFile(dir: string, label: string): string {
+	const base = `${PREFIX}${stamp()}-${label}`;
+	let file = path.join(dir, `${base}.db`);
+	for (let i = 2; fs.existsSync(file); i++) file = path.join(dir, `${base}-${i}.db`);
+	return file;
+}
+
 /**
  * Creates a consistent online backup using SQLite's backup API (safe while the app is
  * running and in WAL mode). Returns the file path.
  */
 export async function createBackup(db: DB, dir: string, label = 'auto'): Promise<string> {
 	fs.mkdirSync(dir, { recursive: true });
-	const file = path.join(dir, `${PREFIX}${stamp()}-${label}.db`);
+	const file = backupFile(dir, label);
 	await db.backup(file);
 	finalize(file);
 	return file;
@@ -36,7 +44,7 @@ function finalize(file: string) {
 /** Synchronous variant (VACUUM INTO) used before migrations, when nothing else runs yet. */
 export function createBackupSync(db: DB, dir: string, label: string): string {
 	fs.mkdirSync(dir, { recursive: true });
-	const file = path.join(dir, `${PREFIX}${stamp()}-${label}.db`);
+	const file = backupFile(dir, label);
 	db.prepare('VACUUM INTO ?').run(file);
 	finalize(file);
 	return file;
@@ -62,7 +70,7 @@ export function listBackups(dir: string): BackupInfo[] {
 
 /** Keeps the newest `keep` automatic backups; manual and pre-migration backups are kept. */
 export function pruneBackups(dir: string, keep: number): string[] {
-	const auto = listBackups(dir).filter((b) => b.file.endsWith('-auto.db'));
+	const auto = listBackups(dir).filter((b) => /-auto(-\d+)?\.db$/.test(b.file));
 	const removed: string[] = [];
 	for (const b of auto.slice(keep)) {
 		fs.rmSync(path.join(dir, b.file), { force: true });

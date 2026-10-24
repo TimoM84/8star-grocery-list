@@ -4,7 +4,8 @@
  */
 
 import type { DB } from './db';
-import type { Category, Item, List, Product, Snapshot } from '$lib/shared/types';
+import { randomBytes } from 'node:crypto';
+import type { AiRecommendation, Category, Item, List, Product, Snapshot } from '$lib/shared/types';
 import {
 	parseOp,
 	UNDOABLE_TYPES,
@@ -23,7 +24,8 @@ export const OP_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 /** Clients may not stamp operations further in the future than this. */
 const MAX_CLOCK_SKEW_MS = 60 * 1000;
 
-type Table = 'lists' | 'categories' | 'products' | 'cycles' | 'items';
+type Table = 'lists' | 'categories' | 'products' | 'ai_recommendations' | 'cycles' | 'items';
+type VersionedTable = 'items' | 'products' | 'ai_recommendations';
 type Row = Record<string, unknown>;
 
 interface ListRow {
@@ -58,9 +60,26 @@ interface ItemRow {
 	updated_at: number;
 	version: number;
 }
+interface AiRecommendationRow {
+	id: string;
+	product_id: string;
+	suggested_quantity: number | null;
+	suggested_unit: string | null;
+	next_purchase_at: number | null;
+	confidence: number;
+	reasoning: string;
+	source: string | null;
+	batch_id: string;
+	fingerprint: string;
+	status: 'open' | 'accepted' | 'dismissed';
+	imported_at: number;
+	resolved_at: number | null;
+	version: number;
+}
+
 interface Inverse {
 	rows: { table: Table; id: string; before: Row | null }[];
-	guards: { table: 'items' | 'products'; id: string; version: number | null }[];
+	guards: { table: VersionedTable; id: string; version: number | null }[];
 }
 
 type Outcome = Omit<OpResult, 'opId' | 'undoable'>;
@@ -74,7 +93,15 @@ class Rejection extends Error {
 	}
 }
 
-const TABLE_ORDER: Table[] = ['lists', 'categories', 'products', 'cycles', 'items'];
+const TABLE_ORDER: Table[] = [
+	'lists',
+	'categories',
+	'products',
+	'ai_recommendations',
+	'cycles',
+	'items'
+];
+const VERSIONED = new Set<Table>(['items', 'products', 'ai_recommendations']);
 const PK_TABLES = new Set<Table>(TABLE_ORDER);
 
 export interface HistoryEntry {
@@ -104,6 +131,28 @@ export class GroceryStore {
 
 	get seq(): number {
 		return this.seqValue;
+	}
+
+	/** Identifies the current dataset; changes when everything is replaced (restore/import). */
+	get epoch(): string {
+		const row = this.db.prepare("SELECT value FROM meta WHERE key = 'epoch'").get() as
+			{ value: string } | undefined;
+		return row?.value ?? '';
+	}
+
+	/**
+	 * Called inside a transaction that replaced the whole dataset: starts a new epoch and makes
+	 * every recorded op non-undoable (their before-images belong to the old data).
+	 */
+	markDatasetReplaced(now = Date.now()) {
+		const epoch = randomBytes(8).toString('hex');
+		this.db
+			.prepare(
+				"INSERT INTO meta (key, value) VALUES ('epoch', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+			)
+			.run(epoch);
+		this.db.prepare('UPDATE ops SET undone_at = ? WHERE undone_at IS NULL').run(now);
+		this.db.prepare('DELETE FROM id_aliases').run();
 	}
 
 	onChange(listener: (seq: number) => void): () => void {
@@ -164,7 +213,23 @@ export class GroceryStore {
 				.sort((a, b) => compareNl(a.name, b.name));
 
 			const items = (this.db.prepare('SELECT * FROM items').all() as ItemRow[]).map(toItem);
-			return { seq: this.seqValue, serverTime: now, lists, categories, products, items };
+			const aiRecommendations = (
+				this.db
+					.prepare(
+						"SELECT * FROM ai_recommendations WHERE status = 'open' ORDER BY confidence DESC, imported_at"
+					)
+					.all() as AiRecommendationRow[]
+			).map(toRecommendation);
+			return {
+				seq: this.seqValue,
+				epoch: this.epoch,
+				serverTime: now,
+				lists,
+				categories,
+				products,
+				items,
+				aiRecommendations
+			};
 		});
 		return read();
 	}
@@ -216,17 +281,6 @@ export class GroceryStore {
 				 ORDER BY c.activated_at DESC LIMIT 500`
 			)
 			.all(this.resolve(productId)) as HistoryEntry[];
-	}
-
-	exportAll() {
-		const read = this.db.transaction(() => ({
-			lists: this.db.prepare('SELECT * FROM lists ORDER BY position').all(),
-			categories: this.db.prepare('SELECT * FROM categories ORDER BY position').all(),
-			products: this.db.prepare('SELECT * FROM products ORDER BY name_key').all(),
-			items: this.db.prepare('SELECT * FROM items ORDER BY activated_at').all(),
-			cycles: this.db.prepare('SELECT * FROM cycles ORDER BY activated_at').all()
-		}));
-		return read();
 	}
 
 	// ---------------------------------------------------------------- writes
@@ -325,6 +379,35 @@ export class GroceryStore {
 	/** Marks data as changed outside of ops (maintenance/test reset) and notifies clients. */
 	touch() {
 		this.bumpSeq();
+		this.notify();
+	}
+
+	/**
+	 * Runs a bulk change (import/restore) in one transaction and bumps the sequence once.
+	 * Throwing inside `fn` rolls everything back, including the sequence number.
+	 */
+	bulkChange<T>(fn: () => T): T {
+		try {
+			const result = this.db.transaction(() => {
+				const r = fn();
+				this.bumpSeq();
+				return r;
+			})();
+			this.notify();
+			return result;
+		} catch (e) {
+			this.reloadSeq();
+			throw e;
+		}
+	}
+
+	private reloadSeq() {
+		const row = this.db.prepare("SELECT value FROM meta WHERE key = 'seq'").get() as
+			{ value: string } | undefined;
+		this.seqValue = row ? Number(row.value) : 0;
+	}
+
+	private notify() {
 		for (const l of this.listeners) l(this.seqValue);
 	}
 
@@ -369,9 +452,13 @@ export class GroceryStore {
 		const rows = [...this.captured!.values()];
 		const guards: Inverse['guards'] = [];
 		for (const r of rows) {
-			if (r.table !== 'items' && r.table !== 'products') continue;
+			if (!VERSIONED.has(r.table)) continue;
 			const current = this.row<{ version: number }>(r.table, r.id);
-			guards.push({ table: r.table, id: r.id, version: current ? current.version : null });
+			guards.push({
+				table: r.table as VersionedTable,
+				id: r.id,
+				version: current ? current.version : null
+			});
 		}
 		return { rows, guards };
 	}
@@ -722,6 +809,19 @@ export class GroceryStore {
 				this.db.prepare('DELETE FROM products WHERE id = ?').run(product.id);
 				return { status: 'applied', productId: product.id };
 			}
+			case 'ai.accept':
+				return this.acceptRecommendation(op, ts, now);
+			case 'ai.dismiss': {
+				const rec = this.recommendation(op.recommendationId);
+				if (rec.status !== 'open') return { status: 'noop', reason: 'already_resolved' };
+				this.capture('ai_recommendations', rec.id);
+				this.db
+					.prepare(
+						"UPDATE ai_recommendations SET status = 'dismissed', resolved_at = ?, version = version + 1 WHERE id = ?"
+					)
+					.run(now, rec.id);
+				return { status: 'applied', productId: rec.product_id };
+			}
 			case 'undo':
 				return this.undo(op.targetOpId, now);
 		}
@@ -794,6 +894,55 @@ export class GroceryStore {
 			)
 			.run(itemId, list.id, product.id, op.quantity, op.unit, ts, cycleId, ts, now);
 		return { status: 'applied', reason: 'created', itemId, productId: product.id };
+	}
+
+	private recommendation(id: string): AiRecommendationRow {
+		const rec = this.row<AiRecommendationRow>('ai_recommendations', id);
+		if (!rec) throw new Rejection('not_found', 'Deze AI-suggestie bestaat niet meer.');
+		return rec;
+	}
+
+	/**
+	 * Accepting a recommendation is an explicit user action: it puts the product on the chosen
+	 * list (with the suggested quantity) exactly like a manual add. Purchase history is untouched.
+	 */
+	private acceptRecommendation(
+		op: Extract<Op, { type: 'ai.accept' }>,
+		ts: number,
+		now: number
+	): Outcome {
+		const rec = this.recommendation(op.recommendationId);
+		if (rec.status !== 'open') return { status: 'noop', reason: 'already_resolved' };
+		const product = this.row<ProductRow>('products', rec.product_id)!;
+		const added = this.addItem(
+			{
+				id: op.id,
+				at: op.at,
+				type: 'item.add',
+				itemId: op.itemId,
+				productId: product.id,
+				listId: op.listId,
+				name: product.name,
+				quantity: rec.suggested_quantity,
+				unit: rec.suggested_quantity === null ? null : rec.suggested_unit,
+				categoryId: null
+			},
+			ts,
+			now
+		);
+		this.capture('ai_recommendations', rec.id);
+		this.db
+			.prepare(
+				"UPDATE ai_recommendations SET status = 'accepted', resolved_at = ?, version = version + 1 WHERE id = ?"
+			)
+			.run(now, rec.id);
+		return {
+			status: 'applied',
+			reason: added.reason === 'duplicate' ? 'already_on_list' : added.reason,
+			message: added.reason === 'duplicate' ? added.message : undefined,
+			itemId: added.itemId,
+			productId: product.id
+		};
 	}
 
 	private updateProduct(op: Extract<Op, { type: 'product.update' }>, now: number): Outcome {
@@ -908,10 +1057,10 @@ export class GroceryStore {
 		}
 		for (const r of restores) {
 			const before = { ...(r.before as Row) };
-			if (r.table === 'items' || r.table === 'products') {
+			if (VERSIONED.has(r.table)) {
 				const current = this.row<{ version: number }>(r.table, r.id);
 				before.version = Math.max(Number(before.version ?? 1), current?.version ?? 0) + 1;
-				before.updated_at = now;
+				if ('updated_at' in before) before.updated_at = now;
 			}
 			const cols = Object.keys(before);
 			const sql = `INSERT INTO ${r.table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})
@@ -947,6 +1096,21 @@ function toList(r: ListRow): List {
 		position: r.position,
 		createdAt: r.created_at,
 		updatedAt: r.updated_at
+	};
+}
+
+function toRecommendation(r: AiRecommendationRow): AiRecommendation {
+	return {
+		id: r.id,
+		productId: r.product_id,
+		suggestedQuantity: r.suggested_quantity,
+		suggestedUnit: r.suggested_unit,
+		nextPurchaseAt: r.next_purchase_at,
+		confidence: r.confidence,
+		reasoning: r.reasoning,
+		source: r.source,
+		importedAt: r.imported_at,
+		version: r.version
 	};
 }
 

@@ -120,6 +120,7 @@ describe('selectors', () => {
 	const weekly = [3, 2, 1, 0].map((i) => NOW - (8 + i * 7) * DAY);
 	const snap: Snapshot = {
 		seq: 1,
+		epoch: 'e1',
 		serverTime: NOW,
 		lists: [{ id: 'l', name: 'L', position: 0, createdAt: 0, updatedAt: 0 }],
 		categories: [],
@@ -129,7 +130,8 @@ describe('selectors', () => {
 			product('km', 'Karnemelk', { completions: [NOW - DAY, NOW - 3 * DAY], purchaseCount: 2 }),
 			product('b', 'Brood')
 		],
-		items: [item('x', 'b', NOW)]
+		items: [item('x', 'b', NOW)],
+		aiRecommendations: []
 	};
 
 	it('autocompletes prefix matches first and skips exact active duplicates', () => {

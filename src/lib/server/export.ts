@@ -1,106 +1,191 @@
-import type { GroceryStore } from './store';
-import { computeStats } from '$lib/shared/stats';
+/** Export endpoints' content builders: versioned JSON, CSV datasets and a ZIP of all CSVs. */
 
-/** CSV with `;` separator and a UTF-8 BOM so Dutch Excel opens it correctly. */
-export function toCsv(header: string[], rows: unknown[][]): string {
-	const cell = (v: unknown) => {
-		if (v === null || v === undefined) return '';
-		const s = String(v);
-		return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-	};
-	return '﻿' + [header, ...rows].map((r) => r.map(cell).join(';')).join('\r\n') + '\r\n';
+import type { DB } from './db';
+import { buildExport, exportData, statisticsRows, type ExportData } from './transfer/format';
+import { toCsv } from './transfer/csv';
+import { createZip } from './transfer/zip';
+
+export { toCsv };
+
+const STATUS_NL = { purchased: 'gekocht', cancelled: 'geannuleerd', open: 'open' } as const;
+/** Decimal comma, matching the `;` separator used for Dutch spreadsheet software. */
+const dec = (n: number | null | undefined) =>
+	n === null || n === undefined ? '' : String(n).replace('.', ',');
+
+export function exportJson(db: DB, version: string, now = Date.now()) {
+	return buildExport(db, version, now);
 }
 
-const iso = (t: unknown) => (typeof t === 'number' ? new Date(t).toISOString() : '');
-const num = (n: number | null) =>
-	n === null ? '' : String(Math.round(n * 10) / 10).replace('.', ',');
+export type CsvDataset =
+	'purchases' | 'products' | 'statistics' | 'lists' | 'categories' | 'list-items';
+export const CSV_DATASETS: CsvDataset[] = [
+	'purchases',
+	'products',
+	'statistics',
+	'lists',
+	'categories',
+	'list-items'
+];
 
-export function exportJson(store: GroceryStore, version: string, now = Date.now()) {
-	const data = store.exportAll();
-	const snapshot = store.snapshot(now);
-	return {
-		app: '8star-grocery-list',
-		version,
-		exportedAt: new Date(now).toISOString(),
-		...data,
-		statistics: snapshot.products.map((p) => ({
-			productId: p.id,
-			name: p.name,
-			...computeStats(p.completions, p.purchaseCount, now, p.firstCompletedAt)
-		}))
-	};
+export function csvFor(dataset: CsvDataset, data: ExportData, now = Date.now()): string {
+	const products = new Map(data.products.map((p) => [p.id, p]));
+	const lists = new Map(data.lists.map((l) => [l.id, l]));
+	const categories = new Map(data.categories.map((c) => [c.id, c]));
+	const catName = (id: string | null | undefined) => (id ? (categories.get(id)?.name ?? '') : '');
+
+	switch (dataset) {
+		case 'purchases':
+			return toCsv(
+				[
+					'purchase_id',
+					'product_id',
+					'product',
+					'categorie',
+					'lijst_id',
+					'lijst',
+					'status',
+					'geactiveerd',
+					'gekocht',
+					'geannuleerd',
+					'aantal',
+					'eenheid'
+				],
+				data.purchaseEvents.map((e) => {
+					const p = products.get(e.productId);
+					return [
+						e.id,
+						e.productId,
+						p?.name,
+						catName(p?.categoryId),
+						e.listId,
+						e.listId ? lists.get(e.listId)?.name : '',
+						STATUS_NL[e.status],
+						e.activatedAt,
+						e.completedAt,
+						e.cancelledAt,
+						dec(e.quantity),
+						e.unit
+					];
+				})
+			);
+		case 'products':
+			return toCsv(
+				[
+					'product_id',
+					'product',
+					'categorie_id',
+					'categorie',
+					'favoriet',
+					'aangemaakt',
+					'bijgewerkt'
+				],
+				data.products.map((p) => [
+					p.id,
+					p.name,
+					p.categoryId,
+					catName(p.categoryId),
+					p.favorite ? 'ja' : 'nee',
+					p.createdAt,
+					p.updatedAt
+				])
+			);
+		case 'statistics':
+			return toCsv(
+				[
+					'product_id',
+					'product',
+					'aantal_keer_gekocht',
+					'eerste_aankoop',
+					'laatste_aankoop',
+					'gem_interval_dagen',
+					'per_maand',
+					'aankopen_90_dagen',
+					'volgende_verwacht',
+					'voldoende_historie'
+				],
+				statisticsRows(data, now).map((s) => [
+					s.productId,
+					s.name,
+					s.purchaseCount,
+					s.firstPurchasedAt,
+					s.lastPurchasedAt,
+					dec(s.avgIntervalDays),
+					dec(s.purchasesPerMonth),
+					s.purchasesLast90Days,
+					s.nextEstimatedAt,
+					s.enoughHistory ? 'ja' : 'nee'
+				])
+			);
+		case 'lists':
+		case 'categories':
+			return toCsv(
+				[
+					dataset === 'lists' ? 'lijst_id' : 'categorie_id',
+					'naam',
+					'positie',
+					'aangemaakt',
+					'bijgewerkt'
+				],
+				(dataset === 'lists' ? data.lists : data.categories).map((l) => [
+					l.id,
+					l.name,
+					l.position,
+					l.createdAt,
+					l.updatedAt
+				])
+			);
+		case 'list-items':
+			return toCsv(
+				[
+					'item_id',
+					'lijst_id',
+					'lijst',
+					'product_id',
+					'product',
+					'status',
+					'aantal',
+					'eenheid',
+					'geactiveerd',
+					'afgevinkt',
+					'purchase_id'
+				],
+				data.listItems.map((i) => [
+					i.id,
+					i.listId,
+					lists.get(i.listId)?.name,
+					i.productId,
+					products.get(i.productId)?.name,
+					i.status === 'active' ? 'te halen' : 'afgevinkt',
+					dec(i.quantity),
+					i.unit,
+					i.activatedAt,
+					i.completedAt,
+					i.purchaseEventId
+				])
+			);
+	}
 }
 
-export function exportPurchasesCsv(store: GroceryStore): string {
-	const { cycles, products, lists, categories } = store.exportAll() as {
-		cycles: Record<string, unknown>[];
-		products: Record<string, unknown>[];
-		lists: Record<string, unknown>[];
-		categories: Record<string, unknown>[];
-	};
-	const productById = new Map(products.map((p) => [p.id, p]));
-	const listById = new Map(lists.map((l) => [l.id, l]));
-	const catById = new Map(categories.map((c) => [c.id, c]));
-	const rows = cycles.map((c) => {
-		const p = productById.get(c.product_id);
-		const status = c.completed_at ? 'gekocht' : c.cancelled_at ? 'geannuleerd' : 'open';
-		return [
-			p?.name,
-			p?.category_id ? catById.get(p.category_id)?.name : '',
-			c.list_id ? listById.get(c.list_id)?.name : '',
-			status,
-			iso(c.activated_at),
-			iso(c.completed_at),
-			iso(c.cancelled_at),
-			c.quantity === null ? '' : String(c.quantity).replace('.', ','),
-			c.unit
-		];
-	});
-	return toCsv(
-		[
-			'product',
-			'categorie',
-			'lijst',
-			'status',
-			'geactiveerd',
-			'gekocht',
-			'geannuleerd',
-			'aantal',
-			'eenheid'
-		],
-		rows
-	);
-}
+const ZIP_README = `8star Boodschappen — CSV-export
 
-export function exportProductsCsv(store: GroceryStore, now = Date.now()): string {
-	const snapshot = store.snapshot(now);
-	const catById = new Map(snapshot.categories.map((c) => [c.id, c.name]));
-	const rows = snapshot.products.map((p) => {
-		const s = computeStats(p.completions, p.purchaseCount, now, p.firstCompletedAt);
-		return [
-			p.name,
-			p.categoryId ? catById.get(p.categoryId) : '',
-			p.favorite ? 'ja' : 'nee',
-			iso(p.createdAt),
-			s.purchaseCount,
-			iso(s.lastPurchasedAt),
-			num(s.avgIntervalDays),
-			num(s.perMonth),
-			iso(s.nextEstimatedAt)
-		];
-	});
-	return toCsv(
-		[
-			'product',
-			'categorie',
-			'favoriet',
-			'aangemaakt',
-			'aantal_keer_gekocht',
-			'laatst_gekocht',
-			'gem_interval_dagen',
-			'per_maand',
-			'volgende_verwacht'
-		],
-		rows
-	);
+Alle bestanden: UTF-8, scheidingsteken ";", decimale komma, tijden in ISO 8601 (UTC).
+Python/pandas: pd.read_csv("purchases.csv", sep=";", decimal=",")
+
+purchases.csv    Elke activering van een product met uitkomst (gekocht/geannuleerd/open).
+products.csv     Alle producten met stabiele product_id.
+statistics.csv   Afgeleide statistieken per product.
+lists.csv        Lijsten.
+categories.csv   Categorieën.
+list-items.csv   Huidige inhoud van de lijsten.
+
+purchases.csv en products.csv kunnen weer worden geïmporteerd (Beheer → Gegevens).
+Voor een volledige herstelbare kopie: gebruik de JSON-export.
+`;
+
+export function exportZip(db: DB, now = Date.now()): Buffer {
+	const data = exportData(db);
+	return createZip([
+		{ name: 'README.txt', data: ZIP_README },
+		...CSV_DATASETS.map((d) => ({ name: `${d}.csv`, data: csvFor(d, data, now) }))
+	]);
 }

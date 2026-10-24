@@ -1,11 +1,14 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { openDatabase } from '$lib/server/db';
 import { GroceryStore } from '$lib/server/store';
 import { SyncEngine, type Storage } from '$lib/client/sync';
 import type { PendingRecord } from '$lib/client/idb';
 import * as idb from '$lib/client/idb';
 import { applyOps, cloneSnapshot } from '$lib/shared/reducer';
+import { runImport } from '$lib/server/transfer/importer';
+import { buildExport } from '$lib/server/transfer/format';
+import os from 'node:os';
 import type { OpPayload } from '$lib/shared/ops';
 
 /** In-process "server" reachable through a fake fetch that can be switched off. */
@@ -185,6 +188,7 @@ describe('SyncEngine', () => {
 		e.enqueue({ type: 'list.delete', listId: 'default' });
 		await settle(e);
 		expect(results).toEqual(['rejected']);
+		await vi.waitFor(() => expect(e.issues).toHaveLength(1));
 		expect(e.issues[0]).toMatchObject({ kind: 'rejected' });
 		expect(e.view!.lists).toHaveLength(1);
 		e.stop();
@@ -264,6 +268,79 @@ describe('SyncEngine', () => {
 		await e.flush();
 		expect(server.store.snapshot().products.map((p) => p.name)).toEqual(['Brood', 'Melk']);
 		expect(e.view!.products.map((p) => p.name)).toEqual(['Brood', 'Melk']);
+		e.stop();
+	});
+
+	it('reconciles with a full restore done elsewhere and keeps unsent offline edits', async () => {
+		const { e } = engine();
+		await e.start();
+		let replacedEvents = 0;
+		e.onDatasetReplaced = () => replacedEvents++;
+		e.enqueue(add('Melk'));
+		await settle(e);
+		const backup = JSON.stringify(buildExport(server.store.db, 'test'));
+		e.enqueue(add('Kaas'));
+		await settle(e);
+
+		// This device goes offline and keeps editing; meanwhile someone restores the backup.
+		server.net.online = false;
+		const offlineAdd = e.enqueue(add('Brood'));
+		const melkId = e.view!.items.find(
+			(i) => e.view!.products.find((p) => p.id === i.productId)!.name === 'Melk'
+		)!.id;
+		e.enqueue({ type: 'item.complete', itemId: melkId });
+		await tick();
+		await e.flush();
+		const report = runImport(server.store, {
+			kind: 'json',
+			mode: 'replace',
+			text: backup,
+			preview: false,
+			backupDir: os.tmpdir()
+		});
+		expect(report.ok).toBe(true);
+
+		server.net.online = true;
+		await e.refresh();
+		expect(replacedEvents).toBe(1);
+		await e.flush();
+		await e.refresh();
+		const snap = server.store.snapshot();
+		// Kaas came after the backup → gone; the queued offline edits were applied, not lost.
+		expect(snap.products.map((p) => p.name).sort()).toEqual(['Brood', 'Melk']);
+		expect(snap.items.find((i) => i.id === melkId)!.status).toBe('completed');
+		expect(e.view!.products.map((p) => p.name).sort()).toEqual(['Brood', 'Melk']);
+		expect(e.queue).toHaveLength(0);
+		expect(e.issues).toHaveLength(0);
+		void offlineAdd;
+		e.stop();
+	});
+
+	it('surfaces queued edits that no longer apply after a restore', async () => {
+		const { e } = engine();
+		await e.start();
+		const backup = JSON.stringify(buildExport(server.store.db, 'test'));
+		e.enqueue(add('Kaas'));
+		await settle(e);
+		const kaasId = e.view!.items[0].id;
+		server.net.online = false;
+		e.enqueue({ type: 'item.complete', itemId: kaasId });
+		await tick();
+		await e.flush();
+		runImport(server.store, {
+			kind: 'json',
+			mode: 'replace',
+			text: backup,
+			preview: false,
+			backupDir: os.tmpdir()
+		});
+		server.net.online = true;
+		await e.refresh();
+		await e.flush();
+		await vi.waitFor(() => expect(e.issues).toHaveLength(1));
+		expect(e.issues[0]).toMatchObject({ kind: 'rejected' });
+		expect(e.issues[0].message).toMatch(/bestaat niet meer/);
+		expect(e.view!.items).toHaveLength(0);
 		e.stop();
 	});
 

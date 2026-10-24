@@ -3,7 +3,7 @@
  * Dutch feedback (toasts with undo).
  */
 
-import type { Item, List, Product, Snapshot, SortMode } from '$lib/shared/types';
+import type { AiRecommendation, Item, List, Product, Snapshot, SortMode } from '$lib/shared/types';
 import type { OpPayload, OpResult } from '$lib/shared/ops';
 import type { LocalOp } from '$lib/shared/reducer';
 import { SyncEngine, type SyncIssue, type SyncStatus } from './sync';
@@ -93,6 +93,8 @@ class AppState {
 		this.view ? productViews(this.view, this.listId, this.now) : []
 	);
 	suggestions = $derived<ProductView[]>(suggestionsFor(this.products, this.snoozed, this.now));
+	/** Open recommendations imported from an external AI tool (separate from local predictions). */
+	aiRecommendations = $derived<AiRecommendation[]>(this.view?.aiRecommendations ?? []);
 
 	start() {
 		if (this.started || typeof window === 'undefined') return;
@@ -115,6 +117,14 @@ class AppState {
 			this.issues = engine.issues;
 		};
 		engine.onResult = (op, result) => this.onResult(op, result);
+		engine.onDatasetReplaced = () =>
+			toasts.show(
+				'De gegevens zijn vervangen door een import of herstel. Je lijst is bijgewerkt.',
+				{
+					kind: 'warn',
+					duration: 7000
+				}
+			);
 		this.engine = engine;
 		void engine.start();
 
@@ -481,6 +491,39 @@ class AppState {
 		if (idx < 0 || target < 0 || target >= ids.length) return;
 		[ids[idx], ids[target]] = [ids[target], ids[idx]];
 		this.run({ type: 'category.reorder', categoryIds: ids });
+	}
+
+	acceptRecommendation(rec: AiRecommendation) {
+		const product = this.product(rec.productId);
+		const item = product ? this.itemFor(product.id) : undefined;
+		haptic();
+		const op = this.run({
+			type: 'ai.accept',
+			recommendationId: rec.id,
+			listId: this.listId,
+			itemId: uuid()
+		});
+		this.undoable(
+			op,
+			item?.status === 'active'
+				? `“${product?.name}” stond al op de lijst — suggestie afgerond`
+				: `“${product?.name ?? 'Product'}” op de lijst gezet`
+		);
+	}
+
+	dismissRecommendation(rec: AiRecommendation) {
+		const op = this.run({ type: 'ai.dismiss', recommendationId: rec.id });
+		this.undoable(
+			op,
+			`AI-suggestie voor “${this.product(rec.productId)?.name ?? 'product'}” genegeerd`
+		);
+	}
+
+	/** Sends queued changes first; resolves true when nothing is waiting anymore. */
+	async flushPending(): Promise<boolean> {
+		if (!this.engine) return false;
+		await this.engine.flush();
+		return this.engine.status.pending === 0;
 	}
 
 	syncNow() {

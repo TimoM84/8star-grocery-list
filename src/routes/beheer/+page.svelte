@@ -213,32 +213,20 @@
 		<h2 id="data-title" class="mb-3 text-lg font-bold">Gegevens</h2>
 		<div class="grid gap-2 sm:grid-cols-2">
 			<a
-				href="/api/export?format=csv&type=purchases"
-				download
-				class="flex min-h-13 items-center gap-3 rounded-2xl bg-surface px-4 font-semibold shadow-card active:bg-surface-2"
-				data-testid="export-csv"
+				href="/beheer/gegevens"
+				class="flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-4 py-3 font-semibold shadow-card active:bg-surface-2"
+				data-testid="open-gegevens"
 			>
-				<Icon name="download" size={20} class="text-accent" /> Aankopen (CSV)
-			</a>
-			<a
-				href="/api/export?format=csv&type=products"
-				download
-				class="flex min-h-13 items-center gap-3 rounded-2xl bg-surface px-4 font-semibold shadow-card active:bg-surface-2"
-				data-testid="export-products-csv"
-			>
-				<Icon name="download" size={20} class="text-accent" /> Producten (CSV)
-			</a>
-			<a
-				href="/api/export?format=json"
-				download
-				class="flex min-h-13 items-center gap-3 rounded-2xl bg-surface px-4 font-semibold shadow-card active:bg-surface-2"
-				data-testid="export-json"
-			>
-				<Icon name="download" size={20} class="text-accent" /> Alles (JSON)
+				<Icon name="upload" size={20} class="shrink-0 text-accent" />
+				<span class="min-w-0 flex-1">
+					<span class="block">Importeren &amp; exporteren</span>
+					<span class="block text-sm font-normal text-muted">JSON, CSV, ZIP en AI-analyse</span>
+				</span>
+				<Icon name="arrowRight" size={18} class="shrink-0 text-faint" />
 			</a>
 			<button
 				type="button"
-				class="flex min-h-13 items-center gap-3 rounded-2xl bg-surface px-4 text-left font-semibold shadow-card active:bg-surface-2"
+				class="flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-4 text-left font-semibold shadow-card active:bg-surface-2"
 				disabled={backupBusy}
 				onclick={backupNow}
 				data-testid="backup-now"

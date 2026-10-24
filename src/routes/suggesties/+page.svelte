@@ -1,6 +1,7 @@
 <script lang="ts">
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ProductRow from '$lib/components/ProductRow.svelte';
+	import AiSuggestions from '$lib/components/AiSuggestions.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { favorites, frequent } from '$lib/shared/selectors';
@@ -77,6 +78,8 @@
 			</ul>
 		{/if}
 	</section>
+
+	<AiSuggestions />
 
 	<section aria-labelledby="favs" data-testid="favorites-section">
 		<h2 id="favs" class="mb-3 flex items-center gap-2 text-lg font-bold">

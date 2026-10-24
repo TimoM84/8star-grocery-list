@@ -49,14 +49,33 @@ export interface Item {
 	version: number;
 }
 
+/** A recommendation imported from an external AI tool (see docs/AI-RECOMMENDATIONS.md). */
+export interface AiRecommendation {
+	id: string;
+	productId: string;
+	suggestedQuantity: number | null;
+	suggestedUnit: string | null;
+	nextPurchaseAt: number | null;
+	/** 0..1 */
+	confidence: number;
+	reasoning: string;
+	source: string | null;
+	importedAt: number;
+	version: number;
+}
+
 /** Full state snapshot as served by `GET /api/snapshot`. */
 export interface Snapshot {
 	seq: number;
+	/** Changes when the whole dataset was replaced by a restore/import. */
+	epoch: string;
 	serverTime: number;
 	lists: List[];
 	categories: Category[];
 	products: Product[];
 	items: Item[];
+	/** Open (not yet accepted or dismissed) AI recommendations. */
+	aiRecommendations: AiRecommendation[];
 }
 
 export type SortMode = 'newest' | 'oldest' | 'az';

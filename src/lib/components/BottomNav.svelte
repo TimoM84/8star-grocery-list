@@ -10,7 +10,7 @@
 		{ href: '/beheer', label: 'Beheer', icon: 'settings' }
 	];
 
-	const suggestionCount = $derived(app.suggestions.length);
+	const suggestionCount = $derived(app.suggestions.length + app.aiRecommendations.length);
 </script>
 
 <nav
@@ -21,7 +21,8 @@
 		class="mx-auto grid h-[var(--nav-h)] max-w-2xl grid-cols-4 px-[env(safe-area-inset-left,0px)]"
 	>
 		{#each tabs as tab (tab.href)}
-			{@const active = page.url.pathname === tab.href}
+			{@const active =
+				tab.href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(tab.href)}
 			<li class="flex">
 				<a
 					href={tab.href}

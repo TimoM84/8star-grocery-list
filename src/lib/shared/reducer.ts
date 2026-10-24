@@ -7,7 +7,7 @@
  * changes nothing. That makes rebasing (snapshot + still-pending ops) safe.
  */
 
-import type { Item, Product, Snapshot } from './types';
+import type { AiRecommendation, Item, Product, Snapshot } from './types';
 import type { Op } from './ops';
 import { capitaliseFirst, cleanName, compareNl, nameKey } from './text';
 
@@ -15,6 +15,7 @@ import { capitaliseFirst, cleanName, compareNl, nameKey } from './text';
 export interface RestoreHint {
 	items: Record<string, Item | null>;
 	products: Record<string, Product | null>;
+	recommendations?: Record<string, AiRecommendation | null>;
 }
 
 export type LocalOp = Op & { restore?: RestoreHint };
@@ -24,11 +25,14 @@ export type Aliases = ReadonlyMap<string, string>;
 export function cloneSnapshot(s: Snapshot): Snapshot {
 	return {
 		seq: s.seq,
+		epoch: s.epoch,
 		serverTime: s.serverTime,
 		lists: s.lists.map((l) => ({ ...l })),
 		categories: s.categories.map((c) => ({ ...c })),
 		products: s.products.map((p) => ({ ...p, completions: [...p.completions] })),
-		items: s.items.map((i) => ({ ...i }))
+		items: s.items.map((i) => ({ ...i })),
+		// Snapshots cached by v1.0.0 have no recommendations yet.
+		aiRecommendations: (s.aiRecommendations ?? []).map((r) => ({ ...r }))
 	};
 }
 
@@ -246,9 +250,40 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 			s.items = s.items.filter((i) => i.productId !== id);
 			return;
 		}
+		case 'ai.accept': {
+			const rec = s.aiRecommendations.find((r) => r.id === op.recommendationId);
+			if (!rec) return;
+			s.aiRecommendations = s.aiRecommendations.filter((r) => r !== rec);
+			const product = s.products.find((p) => p.id === rec.productId);
+			if (!product) return;
+			applyOp(
+				s,
+				{
+					id: op.id,
+					at: op.at,
+					type: 'item.add',
+					itemId: op.itemId,
+					productId: product.id,
+					listId: op.listId,
+					name: product.name,
+					quantity: rec.suggestedQuantity,
+					unit: rec.suggestedQuantity === null ? null : rec.suggestedUnit,
+					categoryId: null
+				},
+				aliases
+			);
+			return;
+		}
+		case 'ai.dismiss':
+			s.aiRecommendations = s.aiRecommendations.filter((r) => r.id !== op.recommendationId);
+			return;
 		case 'undo': {
 			const hint = op.restore;
 			if (!hint) return;
+			for (const [id, before] of Object.entries(hint.recommendations ?? {})) {
+				s.aiRecommendations = s.aiRecommendations.filter((r) => r.id !== id);
+				if (before) s.aiRecommendations.push({ ...before });
+			}
 			for (const [id, before] of Object.entries(hint.products)) {
 				const idx = s.products.findIndex((p) => p.id === id);
 				if (before === null) {
@@ -291,6 +326,29 @@ export function restoreHintFor(s: Snapshot, op: Op, aliases: Aliases = new Map()
 		const found = s.products.find((p) => p.id === id);
 		hint.products[id] = found ? { ...found, completions: [...found.completions] } : null;
 	};
+	if (op.type === 'ai.accept' || op.type === 'ai.dismiss') {
+		const rec = s.aiRecommendations.find((r) => r.id === op.recommendationId);
+		hint.recommendations = { [op.recommendationId]: rec ? { ...rec } : null };
+		const p = rec && s.products.find((x) => x.id === rec.productId);
+		if (op.type === 'ai.accept' && p) {
+			const sub = restoreHintFor(
+				s,
+				{
+					...op,
+					type: 'item.add',
+					productId: p.id,
+					name: p.name,
+					quantity: null,
+					unit: null,
+					categoryId: null
+				},
+				aliases
+			);
+			hint.items = sub.items;
+			hint.products = sub.products;
+		}
+		return hint;
+	}
 	switch (op.type) {
 		case 'item.add': {
 			const key = nameKey(op.name);
