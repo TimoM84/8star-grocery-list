@@ -38,7 +38,7 @@ export const GET = () => {
 					icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }]
 				}
 			]
-		}),
+		}, null, 2),
 		{
 			headers: {
 				'Content-Type': 'application/manifest+json; charset=utf-8',
