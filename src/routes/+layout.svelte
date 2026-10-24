@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import { initializeTheme } from '$lib/client/theme';
 	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { app } from '$lib/client/app.svelte';
@@ -17,6 +18,7 @@
 	const modalOpen = $derived(!!page.state.sheet || !!page.state.confirm);
 
 	onMount(() => {
+		void initializeTheme();
 		app.start();
 		pwa.init();
 
