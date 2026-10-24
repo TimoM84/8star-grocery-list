@@ -15,7 +15,9 @@ import { build, files, version } from '$service-worker';
 const sw = self as unknown as ServiceWorkerGlobalScope;
 const CACHE = `8star-${version}`;
 const SHELL = '/';
-const ASSETS = [...build, ...files].filter((f) => !f.endsWith('.DS_Store') && f !== '/manifest.webmanifest');
+const ASSETS = [...build, ...files].filter(
+	(f) => !f.endsWith('.DS_Store') && f !== '/manifest.webmanifest'
+);
 const ASSET_SET = new Set(ASSETS);
 const NAV_TIMEOUT_MS = 3500;
 
