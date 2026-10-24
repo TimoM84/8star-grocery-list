@@ -1,0 +1,16 @@
+node_modules
+build
+.svelte-kit
+.git
+.github
+data
+screenshots
+test-results
+playwright-report
+scratch
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example

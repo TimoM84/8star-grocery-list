@@ -193,7 +193,7 @@ export class SyncEngine {
 
 	/** Applies an operation optimistically and queues it durably for the server. */
 	enqueue(payload: OpPayload, extra: { restore?: RestoreHint } = {}): LocalOp {
-		const op = { id: uuid(), at: this.now(), ...payload, ...extra } as LocalOp;
+		const op = { id: uuid(), at: Math.round(this.now()), ...payload, ...extra } as LocalOp;
 		if (UNDOABLE_TYPES.has(op.type) && this.view) {
 			this.undoHints.set(op.id, restoreHintFor(this.view, op, this.aliases));
 		}
@@ -288,10 +288,19 @@ export class SyncEngine {
 	}
 
 	private applySnapshot(snap: Snapshot) {
-		// Ignore snapshots older than what we already have (out-of-order responses).
-		if (this.server && snap.seq < this.server.seq) return;
+		// Refreshes are serialised, so a lower seq is never a stale response: it means the server
+		// database was restored from a backup. Accept it and drop overlays of acknowledged ops from
+		// the discarded timeline; ops that never reached the server stay queued and are resent.
+		const rolledBack = this.server !== null && snap.seq < this.server.seq;
+		if (rolledBack) {
+			console.warn('[sync] server data was restored; resyncing');
+			this.aliases.clear();
+			void this.deps.storage.kvSet('aliases', []);
+		}
 		this.server = snap;
-		const dropped = this.queue.filter((r) => r.ackSeq !== null && r.ackSeq <= snap.seq);
+		const dropped = this.queue.filter(
+			(r) => r.ackSeq !== null && (rolledBack || r.ackSeq <= snap.seq)
+		);
 		if (dropped.length) {
 			this.queue = this.queue.filter((r) => !dropped.includes(r));
 			void this.deps.storage.pendingDelete(dropped.map((r) => r.id));

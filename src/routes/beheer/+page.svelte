@@ -23,9 +23,17 @@
 		(app.view?.categories ?? []).map((c) => ({
 			id: c.id,
 			name: c.name,
-			detail: `${app.view?.products.filter((p) => p.categoryId === c.id).length ?? 0} producten`
+			detail: plural(
+				app.view?.products.filter((p) => p.categoryId === c.id).length ?? 0,
+				'product',
+				'producten'
+			)
 		}))
 	);
+
+	function plural(n: number, one: string, many: string) {
+		return `${n} ${n === 1 ? one : many}`;
+	}
 
 	let backupBusy = $state(false);
 

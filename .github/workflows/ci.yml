@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck, lint, unit, build, Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Lint and format
+        run: npm run lint
+
+      - name: Unit and integration tests
+        run: npm run test:unit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright (functional, sync, PWA, mobile layout)
+        run: npm run test:e2e
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots
+          path: screenshots/
+          if-no-files-found: ignore
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker image and compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HOST_PORT: '3999'
+      BIND_ADDRESS: 127.0.0.1
+      DATA_VOLUME: 8star-ci-data
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose up -d --build
+
+      - name: Wait for healthy container
+        run: |
+          for i in $(seq 1 45); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q app)")
+            echo "health: $status"
+            [ "$status" = healthy ] && exit 0
+            sleep 2
+          done
+          docker compose logs app
+          exit 1
+
+      - name: Smoke test, persistence and backup
+        run: |
+          set -eux
+          B=http://127.0.0.1:3999
+          curl -fsS $B/api/health
+          test "$(docker compose exec -T app id -u)" = "1000"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/test/reset)" = "404"
+          curl -fsS -X POST $B/api/ops -H 'content-type: application/json' \
+            -d '{"clientId":"ci","ops":[{"id":"ci-op-1","at":1700000000000,"type":"item.add","itemId":"ci-i","productId":"ci-p","listId":"default","name":"Melk","quantity":null,"unit":null,"categoryId":null}]}'
+          docker compose down
+          docker compose up -d --no-build
+          for i in $(seq 1 30); do curl -fsS $B/api/health && break; sleep 2; done
+          curl -fsS $B/api/snapshot | grep -q '"name":"Melk"'
+          curl -fsS $B/ | grep -q '<html lang="nl">'
+          curl -fsS $B/manifest.webmanifest | grep -q '"display": "standalone"'
+          docker compose exec -T app node scripts/backup.mjs
+          F=$(docker compose exec -T app sh -c 'ls /data/backups | grep manual | tail -1' | tr -d '\r')
+          ./scripts/restore.sh "$F"
+          for i in $(seq 1 30); do curl -fsS $B/api/health && break; sleep 2; done
+          curl -fsS $B/api/snapshot | grep -q '"name":"Melk"'
+
+      - name: Logs
+        if: always()
+        run: docker compose logs app
+
+      - name: Clean up
+        if: always()
+        run: docker compose down -v

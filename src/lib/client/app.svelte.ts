@@ -242,17 +242,32 @@ class AppState {
 			return { kind: 'duplicate', itemId: existing.id };
 		}
 
-		const itemId = existing?.id ?? uuid();
-		const op = this.run({
-			type: 'item.add',
-			itemId,
-			productId: product?.id ?? uuid(),
-			listId,
-			name,
-			quantity: parsed.quantity,
-			unit: parsed.unit,
-			categoryId: product ? null : guessCategory(name)
-		});
+		let op: LocalOp | null;
+		let itemId: string;
+		if (existing) {
+			// Completed on this list: reactivate (and apply a typed quantity).
+			itemId = existing.id;
+			op = this.run({ type: 'item.reactivate', itemId });
+			if (parsed.quantity !== null)
+				this.run({
+					type: 'item.update',
+					itemId,
+					changes: { quantity: parsed.quantity, unit: parsed.unit },
+					base: { quantity: existing.quantity, unit: existing.unit }
+				});
+		} else {
+			itemId = uuid();
+			op = this.run({
+				type: 'item.add',
+				itemId,
+				productId: product?.id ?? uuid(),
+				listId,
+				name,
+				quantity: parsed.quantity,
+				unit: parsed.unit,
+				categoryId: product ? null : guessCategory(name)
+			});
+		}
 		haptic();
 		const label = product?.name ?? name.charAt(0).toLocaleUpperCase('nl') + name.slice(1);
 		if (listId !== this.listId) {

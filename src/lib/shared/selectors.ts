@@ -97,8 +97,11 @@ export function autocomplete(views: ProductView[], query: string, limit = 6): Pr
 		else if (key.split(/[\s-]+/).some((w) => w.startsWith(q))) score = 200;
 		else if (key.includes(q)) score = 100;
 		else continue;
+		// Prefer exact and short matches, then frequently/recently bought and favourites.
+		if (key === q) score += 50;
+		score -= Math.min(key.length - q.length, 20);
 		score +=
-			Math.min(v.stats.purchaseCount, 50) + (v.product.favorite ? 40 : 0) + v.stats.recentCount * 3;
+			Math.min(v.stats.purchaseCount, 50) + v.stats.recentCount * 3 + (v.product.favorite ? 15 : 0);
 		if (v.status === 'active') score -= 250;
 		scored.push({ v, score });
 	}

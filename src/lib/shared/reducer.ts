@@ -120,6 +120,8 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 
 		case 'item.add': {
 			if (!s.lists.some((l) => l.id === op.listId)) return;
+			// Already applied (the snapshot contains it, possibly under its canonical id).
+			if (s.items.some((i) => i.id === resolve(aliases, op.itemId))) return;
 			const name = capitaliseFirst(cleanName(op.name));
 			const key = nameKey(name);
 			let product = s.products.find((p) => nameKey(p.name) === key);
@@ -155,7 +157,6 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 				bump(existing);
 				return;
 			}
-			if (s.items.some((i) => i.id === op.itemId)) return;
 			s.items.push({
 				id: op.itemId,
 				listId: op.listId,

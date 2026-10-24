@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import type { DB } from './db';
 
 const PREFIX = 'grocery-';
@@ -16,7 +17,20 @@ export async function createBackup(db: DB, dir: string, label = 'auto'): Promise
 	fs.mkdirSync(dir, { recursive: true });
 	const file = path.join(dir, `${PREFIX}${stamp()}-${label}.db`);
 	await db.backup(file);
+	finalize(file);
 	return file;
+}
+
+/** Makes a backup a single self-contained file (no -wal/-shm companions) and verifies it. */
+function finalize(file: string) {
+	const copy = new Database(file);
+	try {
+		copy.pragma('journal_mode = DELETE');
+		const ok = copy.pragma('integrity_check', { simple: true });
+		if (ok !== 'ok') throw new Error(`backup integrity check failed: ${ok}`);
+	} finally {
+		copy.close();
+	}
 }
 
 /** Synchronous variant (VACUUM INTO) used before migrations, when nothing else runs yet. */
@@ -24,6 +38,7 @@ export function createBackupSync(db: DB, dir: string, label: string): string {
 	fs.mkdirSync(dir, { recursive: true });
 	const file = path.join(dir, `${PREFIX}${stamp()}-${label}.db`);
 	db.prepare('VACUUM INTO ?').run(file);
+	finalize(file);
 	return file;
 }
 

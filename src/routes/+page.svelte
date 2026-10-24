@@ -38,7 +38,7 @@
 	async function clearCompleted() {
 		const ok = await ui.confirm({
 			title: 'Afgevinkte items wissen?',
-			message: `${completed.length} item(s) verdwijnen van deze lijst. De aankoopgeschiedenis blijft bewaard.`,
+			message: `${completed.length === 1 ? '1 item verdwijnt' : `${completed.length} items verdwijnen`} van deze lijst. De aankoopgeschiedenis blijft bewaard.`,
 			confirmLabel: 'Wissen',
 			danger: true
 		});
