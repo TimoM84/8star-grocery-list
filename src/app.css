@@ -2,14 +2,14 @@
 
 /* Automatic light/dark theme; runtime colors are injected from APP_PRIMARY_COLOR. */
 :root {
- --runtime-light-accent: #1d7f46;
- --runtime-light-strong: #166b3a;
- --runtime-light-contrast: #ffffff;
- --runtime-light-soft: #dff0e5;
- --runtime-dark-accent: #4cc982;
- --runtime-dark-strong: #6bd697;
- --runtime-dark-contrast: #04210f;
- --runtime-dark-soft: #163322;
+	--runtime-light-accent: #1d7f46;
+	--runtime-light-strong: #166b3a;
+	--runtime-light-contrast: #ffffff;
+	--runtime-light-soft: #dff0e5;
+	--runtime-dark-accent: #4cc982;
+	--runtime-dark-strong: #6bd697;
+	--runtime-dark-contrast: #04210f;
+	--runtime-dark-soft: #163322;
 }
 :root {
 	--bg: #f4f5f2;
