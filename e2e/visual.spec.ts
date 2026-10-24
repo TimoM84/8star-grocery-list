@@ -22,7 +22,8 @@ const PAGES = [
 	{ path: '/', name: 'lijst' },
 	{ path: '/suggesties', name: 'suggesties' },
 	{ path: '/historie', name: 'historie' },
-	{ path: '/beheer', name: 'beheer' }
+	{ path: '/beheer', name: 'beheer' },
+	{ path: '/beheer/gegevens', name: 'gegevens' }
 ];
 
 test.use({ contextOptions: { reducedMotion: 'reduce' } });
@@ -59,6 +60,27 @@ async function seed(page: Page) {
 	await postOps(page.request, [
 		{ type: 'product.update', productId: yog.id, changes: { favorite: true }, base: {} }
 	]);
+	const melk = snap.products.find((p: { name: string }) => p.name === 'Halfvolle melk');
+	const res = await page.request.post('/api/import?kind=ai&mode=merge', {
+		headers: { 'content-type': 'application/octet-stream' },
+		data: JSON.stringify({
+			format: '8star-ai-recommendations',
+			formatVersion: 1,
+			source: 'ChatGPT',
+			recommendations: [
+				{
+					productId: melk.id,
+					suggestedQuantity: 2,
+					unit: 'l',
+					nextPurchaseDate: new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10),
+					confidence: 0.82,
+					reasoning:
+						'Je koopt elke week halfvolle melk en de laatste aankoop was zeven dagen geleden; twee liter dekt de komende week.'
+				}
+			]
+		})
+	});
+	expect((await res.json()).ok).toBe(true);
 	await page.reload();
 	await expect(page.locator('[data-testid=item-row]').first()).toBeVisible();
 }
@@ -119,6 +141,7 @@ async function audit(page: Page): Promise<Problem[]> {
 			(el) =>
 				visible(el) &&
 				!(el as HTMLElement).hasAttribute('tabindex') &&
+				!el.classList.contains('sr-only') &&
 				!el.closest('[aria-hidden=true]')
 		);
 		for (const el of targets) {

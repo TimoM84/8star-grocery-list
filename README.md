@@ -10,7 +10,8 @@ The UI is in Dutch; code and documentation are in English.
   <img src="docs/screenshots/lijst-390-portrait-light.png" width="200" alt="Main list, light mode" />
   <img src="docs/screenshots/lijst-390-portrait-dark.png" width="200" alt="Main list, dark mode" />
   <img src="docs/screenshots/suggesties-390-portrait-light.png" width="200" alt="Suggestions" />
-  <img src="docs/screenshots/sheet-product-390.png" width="200" alt="Product statistics" />
+  <img src="docs/screenshots/gegevens-390-portrait-light.png" width="200" alt="Import and export" />
+  <img src="docs/screenshots/theme-blue-light.png" width="200" alt="APP_PRIMARY_COLOR=#2563EB" />
 </p>
 
 ## Features
@@ -42,8 +43,27 @@ The UI is in Dutch; code and documentation are in English.
 - **Misschien nodig**: local predictions once a product has at least 3 purchases. Never added
   automatically. One tap adds a suggestion; “Niet nu” hides it for a while.
 - Favourites, frequently bought products, searchable product history and purchase timeline.
-- Export purchases or products as CSV (`;`-separated, opens directly in Dutch Excel), or
-  everything as JSON.
+
+**Import, export and external AI** (Beheer → Gegevens)
+
+- Versioned, complete JSON export with stable ids and ISO 8601 timestamps. Restore it fully
+  (**Alles vervangen**, with an automatic pre-import backup and confirmation) or **merge** it into
+  existing data.
+- CSV export of purchases, products and statistics, or everything as a ZIP. CSV import of
+  products and purchase history.
+- Every import shows a preview first, validates the whole file, detects duplicates, runs in one
+  transaction and reports the result in plain Dutch. See [docs/IMPORT-EXPORT.md](docs/IMPORT-EXPORT.md).
+- **AI-suggesties**: analyse your export with ChatGPT, Claude or Python and import the result.
+  Suggestions are shown separately from the local predictions, accepted or dismissed with one
+  tap, and never touch the list or history by themselves. See
+  [docs/AI-RECOMMENDATIONS.md](docs/AI-RECOMMENDATIONS.md).
+
+**One accent color for the whole app**
+
+- `APP_PRIMARY_COLOR` in Docker Compose/Dockhand (e.g. `"#2563EB"`) restyles buttons, sort control,
+  navigation, focus rings, suggestions, the PWA manifest and the app icons. It is applied at
+  runtime, so recreating the container is enough. Accessible light and dark variants are derived
+  automatically; warning and error colors stay as they are.
 
 **Sync and offline**
 
@@ -93,22 +113,23 @@ src/
   lib/components/ UI components (rows, sheets, sort control, navigation…)
   routes/         / (Lijst), /suggesties, /historie, /beheer, /api/*
   service-worker.ts
-tests/            Vitest unit + integration (store, sync engine against an in-process server)
-e2e/              Playwright: CRUD, lists, history, multi-device sync, offline, PWA, mobile layout
+tests/            Vitest unit + integration (store, imports, sync engine, backups, release script)
+e2e/              Playwright: CRUD, lists, history, sync, offline, imports, AI, theme, PWA, layout
 ```
 
 ### Data model
 
-| Table        | Purpose                                                                          |
-| ------------ | -------------------------------------------------------------------------------- |
-| `lists`      | Shopping lists with order                                                        |
-| `categories` | Categories with configurable order (Dutch defaults seeded)                       |
-| `products`   | Unique products (`name_key` = lower-cased, whitespace-collapsed), favourite flag |
-| `items`      | A product on a list: status, quantity, unit, `activated_at`, `completed_at`      |
-| `cycles`     | Every activation → purchase (`completed_at`) or cancellation: the full history   |
-| `ops`        | Applied operations (idempotency + undo inverse), pruned after 90 days            |
-| `id_aliases` | Client ids merged into existing entities (concurrent duplicate adds)             |
-| `meta`       | Global change sequence                                                           |
+| Table                | Purpose                                                                           |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `lists`              | Shopping lists with order                                                         |
+| `categories`         | Categories with configurable order (Dutch defaults seeded)                        |
+| `products`           | Unique products (`name_key` = lower-cased, whitespace-collapsed), favourite flag  |
+| `items`              | A product on a list: status, quantity, unit, `activated_at`, `completed_at`       |
+| `cycles`             | Every activation → purchase (`completed_at`) or cancellation: the full history    |
+| `ops`                | Applied operations (idempotency + undo inverse), pruned after 90 days             |
+| `id_aliases`         | Client ids merged into existing entities (concurrent duplicate adds)              |
+| `ai_recommendations` | Imported external AI suggestions (open/accepted/dismissed), separate from history |
+| `meta`               | Global change sequence and data epoch                                             |
 
 ## Development
 
@@ -123,7 +144,6 @@ npm run test:unit        # Vitest unit + integration tests
 npm run build            # production build into ./build
 npm run test:e2e         # Playwright against the production build (run build first)
 npm run test:all         # everything above
-npm run icons            # regenerate PNG icons from the SVG source
 ```
 
 Playwright starts the built server on port 4173 with a throw-away data directory and
@@ -161,6 +181,7 @@ curl http://<BIND_ADDRESS>:3000/api/health
 | `ORIGIN`                              | –                                            | Public URL when behind an HTTPS reverse proxy |
 | `PROTOCOL_HEADER`                     | –                                            | e.g. `x-forwarded-proto` behind a proxy       |
 | `HOST_HEADER`                         | –                                            | e.g. `x-forwarded-host` behind a proxy        |
+| `APP_PRIMARY_COLOR`                   | `#1D7F46`                                    | Accent color (six-digit hex), runtime         |
 | `TZ`                                  | `Europe/Amsterdam`                           | Time zone                                     |
 | `BACKUP_INTERVAL_HOURS`               | `24`                                         | Automatic backup interval, `0` disables       |
 | `BACKUP_KEEP`                         | `14`                                         | Number of automatic backups to keep           |
@@ -170,17 +191,24 @@ curl http://<BIND_ADDRESS>:3000/api/health
 ### Backups and restore
 
 ```sh
-docker compose exec app node scripts/backup.mjs           # consistent online backup
-scripts/restore.sh grocery-2026-10-24_03-00-00-auto.db    # stop, verify, swap, start
+docker compose exec app node scripts/backup.mjs              # consistent online backup
+sh scripts/restore.sh --list                                 # available backups
+sh scripts/restore.sh grocery-2026-10-24_03-00-00-auto.db    # stop, verify, swap, start
 ```
 
-Details and the manual procedure are in [docs/DOCKHAND.md](docs/DOCKHAND.md#8-backups-and-restore).
+Details and the manual procedure are in [docs/DOCKHAND.md](docs/DOCKHAND.md#9-backups-restore-and-data-import).
 
 ### HTTPS
 
 Android requires HTTPS to install the app and to start it offline. Over plain HTTP on a LAN IP,
 the shared list and realtime sync work, but installation and offline start don't. The easiest
-private option is `tailscale serve`. See [docs/DOCKHAND.md](docs/DOCKHAND.md#4-https-needed-for-installing-and-offline-start).
+private option is `tailscale serve`. See [docs/DOCKHAND.md](docs/DOCKHAND.md#5-https-needed-for-installing-and-offline-start).
+
+## Releases
+
+Releases are published from the terminal with `bash scripts/release.sh vX.Y.Z` after the release
+PR is merged and CI is green; deployment in Dockhand is a separate step. See
+[docs/RELEASE.md](docs/RELEASE.md).
 
 ## Security model
 

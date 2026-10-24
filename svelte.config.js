@@ -1,7 +1,7 @@
 import adapter from '@sveltejs/adapter-node';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -19,7 +19,7 @@ function contentHash(dirs) {
 			else hash.update(file).update(readFileSync(file));
 		}
 	};
-	for (const d of dirs) walk(d);
+	for (const d of dirs) if (existsSync(d)) walk(d);
 	return hash.digest('hex').slice(0, 10);
 }
 

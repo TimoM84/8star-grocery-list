@@ -122,5 +122,33 @@ INSERT INTO categories (id, name, position, created_at, updated_at) VALUES
 	('cat-verzorging', 'Verzorging', 9, 0, 0),
 	('cat-huishouden', 'Huishouden', 10, 0, 0);
 `
+	},
+	{
+		version: 3,
+		name: 'ai recommendations and data epoch',
+		sql: `
+-- Recommendations imported from external AI tools. Kept separate from local predictions and
+-- from purchase history: accepting one only adds the product to a list.
+CREATE TABLE ai_recommendations (
+	id                 TEXT PRIMARY KEY,
+	product_id         TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+	suggested_quantity REAL,
+	suggested_unit     TEXT,
+	next_purchase_at   INTEGER,
+	confidence         REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+	reasoning          TEXT NOT NULL,
+	source             TEXT,
+	batch_id           TEXT NOT NULL,
+	fingerprint        TEXT NOT NULL UNIQUE,
+	status             TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'accepted', 'dismissed')),
+	imported_at        INTEGER NOT NULL,
+	resolved_at        INTEGER,
+	version            INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX ai_recommendations_status ON ai_recommendations(status, product_id);
+
+-- Changes whenever the whole dataset is replaced (restore/import), so devices can reconcile.
+INSERT OR IGNORE INTO meta (key, value) VALUES ('epoch', lower(hex(randomblob(8))));
+`
 	}
 ];

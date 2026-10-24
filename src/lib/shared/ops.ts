@@ -50,6 +50,8 @@ export type OpPayload =
 			base: { name?: string; categoryId?: string | null; favorite?: boolean };
 	  }
 	| { type: 'product.delete'; productId: string }
+	| { type: 'ai.accept'; recommendationId: string; listId: string; itemId: string }
+	| { type: 'ai.dismiss'; recommendationId: string }
 	| { type: 'undo'; targetOpId: string };
 
 export type Op = OpBase & OpPayload;
@@ -102,7 +104,9 @@ export const UNDOABLE_TYPES: ReadonlySet<OpType> = new Set<OpType>([
 	'item.delete',
 	'list.clearCompleted',
 	'product.update',
-	'product.delete'
+	'product.delete',
+	'ai.accept',
+	'ai.dismiss'
 ]);
 
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -248,6 +252,20 @@ export function parseOp(raw: unknown): Op {
 		}
 		case 'product.delete':
 			return { ...base, type: raw.type, productId: id(raw.productId, 'productId') };
+		case 'ai.accept':
+			return {
+				...base,
+				type: raw.type,
+				recommendationId: id(raw.recommendationId, 'recommendationId'),
+				listId: id(raw.listId, 'listId'),
+				itemId: id(raw.itemId, 'itemId')
+			};
+		case 'ai.dismiss':
+			return {
+				...base,
+				type: raw.type,
+				recommendationId: id(raw.recommendationId, 'recommendationId')
+			};
 		case 'undo':
 			return { ...base, type: raw.type, targetOpId: id(raw.targetOpId, 'targetOpId') };
 		default:

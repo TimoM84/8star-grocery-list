@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.1.0
+
+Rebuilt from the verified v1.0.0 baseline. The unfinished `feat/v1.1-import-ai-theme` draft was
+reviewed and not merged: it had no import or AI functionality, a theme that flashed and broke the
+browser theme color, a release script that switched branches and checked the wrong CI run, and
+failing CI.
+
+### Added
+
+- **Import and export** (Beheer → Gegevens):
+  - Versioned JSON export (`8star-grocery-export`, format 1) with stable ids, all relationships,
+    ISO 8601 timestamps and derived statistics.
+  - **Full restore** (replace) with preview, explicit confirmation, an automatic `pre-import`
+    backup, and a new data epoch so every device reconciles.
+  - **Merge** of a JSON export into existing data. Duplicates are detected and existing data
+    wins.
+  - Legacy v1.0.0 JSON exports are imported too.
+  - CSV import of products and purchase history (`;`/`,`/tab, ISO and Dutch dates), with per-line
+    validation and duplicate detection.
+  - CSV export of purchases, products, statistics, lists, categories and list items, plus a ZIP
+    with all of them.
+  - Every import is validated completely, runs in one transaction (rolled back on any error),
+    and shows a readable Dutch preview and result.
+- **AI-suggesties**: importable recommendation format (`8star-ai-recommendations`, format 1) with
+  product validation, duplicate prevention, one-tap accept or dismiss (both undoable and synced),
+  and a downloadable AI prompt. Suggestions are kept separate from local predictions, never
+  change a list by themselves, and never touch purchase history.
+- **`APP_PRIMARY_COLOR`**: one accent color for the whole app, read at runtime from Docker
+  Compose/Dockhand (recreate, no rebuild).
+  - WCAG AA light and dark variants are derived automatically; semantic colors are unchanged.
+  - The color is injected server-side into the HTML shell, so the service worker keeps the last
+    known theme offline.
+  - The PWA manifest and app icons are generated in the configured color.
+- `scripts/release.sh`: guarded GitHub CLI release from the terminal. It checks branch, clean
+  tree, sync with origin, versions, changelog notes, existing tags and releases, and every CI
+  check on the exact commit. It then asks for typed confirmation, creates an annotated tag and
+  publishes notes from this changelog. It has a `--dry-run` mode.
+- `scripts/ci/docker-test.sh` (run in CI): real upgrade from the v1.0.0 image with data, runtime
+  theme change, JSON round trip, persistence, backup and restore.
+- Database migration 3 (`ai_recommendations`, data epoch). Earlier migrations are unchanged.
+- Docs: IMPORT-EXPORT.md, AI-RECOMMENDATIONS.md and RELEASE.md. DOCKHAND.md now has the correct
+  repository URL and branch, plus update and rollback procedures.
+
+### Fixed
+
+- Backups made within the same second no longer collide: the second one used to fail.
+- `restore.sh` takes the image and volume from the running stack (no hardcoded version), works
+  from any directory, refuses path names, makes the pre-restore copy with SQLite's backup API
+  (including WAL contents), and restarts the app unchanged if the restore fails.
+- Undo of an op touching AI suggestions no longer assumes an `updated_at` column.
+- Clients accept a dataset that was replaced elsewhere (epoch change), not only lowered sequence
+  numbers.
+- The default light accent tint was lightened slightly (`#dff0e5` → `#ebf6ee`): green text on it
+  was 4.25:1 and is now above 4.5:1.
+
+### Changed
+
+- The import request body limit is 25 MB (`BODY_SIZE_LIMIT`).
+- The static manifest and icons were replaced by runtime-generated ones. `npm run icons` was
+  removed.
+- The image is tagged `8star-grocery-list:1.1.0` and carries OCI labels.
+
+### Upgrade notes
+
+Redeploy in Dockhand; the database migrates automatically after writing a `pre-migration-v2`
+backup. The `8star-grocery-data` volume and the service name `app` are unchanged. See
+docs/DOCKHAND.md §7 for the procedure and the rollback.
+
 ## 1.0.0
 
 First release.

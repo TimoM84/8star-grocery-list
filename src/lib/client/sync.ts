@@ -77,6 +77,8 @@ export class SyncEngine {
 
 	/** Called after every state change (view, status or issues). */
 	onChange: () => void = () => {};
+	/** Called when another device replaced the whole dataset (restore/import). */
+	onDatasetReplaced: () => void = () => {};
 	/** Called for every acknowledged op that the user should hear about. */
 	onResult: (op: LocalOp, result: OpResult) => void = () => {};
 
@@ -291,9 +293,15 @@ export class SyncEngine {
 		// Refreshes are serialised, so a lower seq is never a stale response: it means the server
 		// database was restored from a backup. Accept it and drop overlays of acknowledged ops from
 		// the discarded timeline; ops that never reached the server stay queued and are resent.
-		const rolledBack = this.server !== null && snap.seq < this.server.seq;
+		const replaced =
+			this.server !== null &&
+			!!this.server.epoch &&
+			!!snap.epoch &&
+			snap.epoch !== this.server.epoch;
+		const rolledBack = replaced || (this.server !== null && snap.seq < this.server.seq);
+		if (replaced) this.onDatasetReplaced();
 		if (rolledBack) {
-			console.warn('[sync] server data was restored; resyncing');
+			console.warn('[sync] server data was restored or replaced; resyncing');
 			this.aliases.clear();
 			void this.deps.storage.kvSet('aliases', []);
 		}

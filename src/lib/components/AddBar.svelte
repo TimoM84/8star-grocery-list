@@ -87,7 +87,11 @@
 			aria-autocomplete="list"
 			aria-activedescendant={active >= 0 ? `sugg-${active}` : undefined}
 			onfocus={() => (focused = true)}
-			onblur={() => setTimeout(() => (focused = false), 120)}
+			onblur={() =>
+				setTimeout(() => {
+					// Ignore a stale blur when the field was focused again in the meantime.
+					if (document.activeElement !== input) focused = false;
+				}, 120)}
 			{onkeydown}
 			data-testid="add-input"
 		/>
