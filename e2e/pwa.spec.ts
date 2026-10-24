@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { addItems, freshApp, row, waitForSync } from './helpers';
 
@@ -80,7 +81,8 @@ test('service worker caches the app shell so the app starts offline with local d
 test('API responses are never cached and health endpoint reports status', async ({ request }) => {
 	const res = await request.get('/api/health');
 	expect(res.headers()['cache-control']).toBe('no-store');
-	expect(await res.json()).toMatchObject({ status: 'ok', version: '1.0.0' });
+	const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')) as { version: string };
+	expect(await res.json()).toMatchObject({ status: 'ok', version: pkg.version, schemaVersion: 3 });
 	const reset = await request.post('/api/test/reset');
 	expect(reset.ok()).toBeTruthy();
 });

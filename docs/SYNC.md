@@ -54,20 +54,22 @@ contains changes nothing.
 The server applies ops in the order it receives them. Ops express _intent_ ("complete item X"),
 not "set the whole row to Y", which avoids most conflicts by design.
 
-| Situation                                                    | Result                                                                                                                                       |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Two devices add the same product (any case/spacing)          | One product and one list item. The second add is a no-op (`duplicate`); its local ids are mapped to the existing ones (`id_aliases`)         |
-| A device keeps using the id of a merged duplicate            | The server resolves the alias, so e.g. completing the "local" item completes the real one                                                    |
-| Two devices complete the same item                           | First one wins. The second is a no-op (`already_completed`), so a purchase is **never counted twice**                                        |
-| Two devices reactivate the same item                         | First one wins, the second is a no-op                                                                                                        |
-| Concurrent edits of the same field (quantity, unit, name, …) | **Last writer wins**, field by field. Each edit carries the value the device last saw (`base`); a mismatch is reported to the writing device |
-| Edits of _different_ fields                                  | Both are kept (field-level merge)                                                                                                            |
-| Editing or completing an item deleted on another device      | Rejected (`not_found`). The device shows a message and the change is logged under Beheer → Synchronisatie                                    |
-| Adding to a list deleted on another device                   | Rejected (`list_not_found`), shown and logged                                                                                                |
-| Renaming to a name that exists already                       | Rejected (`duplicate`), shown and logged                                                                                                     |
-| Moving an item to a list that already has the product        | Merged: the active row wins; a completed duplicate is removed                                                                                |
-| Undo after someone else changed the same item                | Rejected (`conflict`). Undo only applies when the item still has the version the original op produced                                        |
-| Server restored from a backup (seq goes down)                | Devices accept the restored data, drop overlays of already-acknowledged ops, and re-send ops that never reached the server                   |
+| Situation                                                     | Result                                                                                                                                                          |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two devices add the same product (any case/spacing)           | One product and one list item. The second add is a no-op (`duplicate`); its local ids are mapped to the existing ones (`id_aliases`)                            |
+| A device keeps using the id of a merged duplicate             | The server resolves the alias, so e.g. completing the "local" item completes the real one                                                                       |
+| Two devices complete the same item                            | First one wins. The second is a no-op (`already_completed`), so a purchase is **never counted twice**                                                           |
+| Two devices reactivate the same item                          | First one wins, the second is a no-op                                                                                                                           |
+| Concurrent edits of the same field (quantity, unit, name, …)  | **Last writer wins**, field by field. Each edit carries the value the device last saw (`base`); a mismatch is reported to the writing device                    |
+| Edits of _different_ fields                                   | Both are kept (field-level merge)                                                                                                                               |
+| Editing or completing an item deleted on another device       | Rejected (`not_found`). The device shows a message and the change is logged under Beheer → Synchronisatie                                                       |
+| Adding to a list deleted on another device                    | Rejected (`list_not_found`), shown and logged                                                                                                                   |
+| Renaming to a name that exists already                        | Rejected (`duplicate`), shown and logged                                                                                                                        |
+| Moving an item to a list that already has the product         | Merged: the active row wins; a completed duplicate is removed                                                                                                   |
+| Undo after someone else changed the same item                 | Rejected (`conflict`). Undo only applies when the item still has the version the original op produced                                                           |
+| Server restored from a backup (seq goes down)                 | Devices accept the restored data, drop overlays of already-acknowledged ops, and re-send ops that never reached the server                                      |
+| Full import/restore done on another device (new data epoch)   | Devices are told (toast), drop cached state and overlays, reload the server data and then send their unsent ops; ops that no longer fit are rejected and logged |
+| Accepting or dismissing the same AI suggestion on two devices | First one wins, the second is a no-op; the product is put on the list only once                                                                                 |
 
 ### No silent data loss
 
@@ -79,6 +81,33 @@ not "set the whole row to Y", which avoids most conflicts by design.
   the rest of the batch. Server errors (5xx) keep the whole batch queued for retry.
 - The server never deletes history implicitly. Deleting a list item keeps its purchase cycles.
   Only an explicit, confirmed "product en geschiedenis verwijderen" removes history.
+
+## Imports, restores and data epochs
+
+Bulk changes (imports, JSON restore, merges) don't go through the op queue. They run on the server
+in one SQLite transaction and bump the sequence number once, so every device refreshes through
+the normal SSE path.
+
+A full replace also starts a new **data epoch** (random id in `meta.epoch`, sent with every
+snapshot). A device that sees the epoch change:
+
+1. shows "De gegevens zijn vervangen door een import of herstel";
+2. drops its id aliases and the overlays of ops that were already acknowledged (they belong to
+   the old data);
+3. keeps every op that never reached the server and sends it afterwards. The server applies it
+   to the restored data, or rejects it with a readable reason that ends up in the sync log.
+   Nothing is discarded silently.
+
+The replace also marks all recorded ops as no longer undoable, because their before-images
+describe the replaced data. Before importing, the importing device sends its own queued ops
+first. A restore of a SQLite backup lowers the sequence number instead, and devices handle that
+the same way (see the conflict table).
+
+## AI suggestions
+
+`ai.accept` and `ai.dismiss` are ordinary, idempotent, undoable ops. Accepting puts the product
+on the chosen list exactly like an `item.add` (or reactivates it) and marks the suggestion as
+accepted, in one transaction. It never writes purchase history.
 
 ## Undo
 

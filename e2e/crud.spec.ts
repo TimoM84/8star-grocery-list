@@ -55,6 +55,18 @@ test('autocompletes from previous products and re-adds with one tap', async ({ p
 	await expect(page.getByTestId('add-input')).toBeFocused();
 });
 
+test('suggestions stay open when the field is refocused right after a tap elsewhere', async ({
+	page
+}) => {
+	await addItems(page, 'Volkorenbrood');
+	const input = page.getByTestId('add-input');
+	await input.fill('vol');
+	await input.blur();
+	await input.focus(); // within the blur grace period
+	await page.waitForTimeout(300);
+	await expect(page.getByTestId('autocomplete')).toBeVisible();
+});
+
 test('completes and reactivates items; reactivation moves it to the top (newest)', async ({
 	page
 }) => {
