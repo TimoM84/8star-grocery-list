@@ -9,7 +9,8 @@ set -eu
 
 BACKUP="${1:?usage: scripts/restore.sh <backup-file-name>}"
 VOLUME="${DATA_VOLUME:-8star-grocery-data}"
-IMAGE="${IMAGE:-8star-grocery-list:${APP_VERSION:-1.0.0}}"
+IMAGE="${IMAGE:-$(docker inspect --format '{{.Config.Image}}' "$(docker compose ps -aq app)")}"
+# Use the exact image of the stopped service, not a hardcoded old release tag.
 
 echo "Stopping the app…"
 docker compose stop app
