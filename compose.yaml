@@ -8,7 +8,7 @@ services:
       context: .
       args:
         BUILD_ID: ${BUILD_ID:-}
-    image: 8star-grocery-list:${APP_VERSION:-1.0.0}
+    image: 8star-grocery-list:${APP_VERSION:-1.1.0}
     pull_policy: build
     restart: unless-stopped
     init: true
@@ -17,6 +17,7 @@ services:
       - '${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000'
     environment:
       TZ: ${TZ:-Europe/Amsterdam}
+      APP_PRIMARY_COLOR: ${APP_PRIMARY_COLOR:-#1D7F46}
       ORIGIN: ${ORIGIN:-}
       PROTOCOL_HEADER: ${PROTOCOL_HEADER:-}
       HOST_HEADER: ${HOST_HEADER:-}
