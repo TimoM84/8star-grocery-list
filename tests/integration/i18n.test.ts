@@ -81,6 +81,22 @@ describe('dictionaries', () => {
 	});
 });
 
+describe('wording', () => {
+	it('summarises an import naturally in every language', () => {
+		const counted = (lang: (typeof LANGUAGES)[number], n: number) => {
+			const s = messagesFor(lang).import.summary;
+			const [one, many] = s.labels.products;
+			return s.action(`${n} ${n === 1 ? one : many}`, n, 'added', true);
+		};
+		expect(counted('nl', 1)).toBe('1 product wordt toegevoegd');
+		expect(counted('nl', 2)).toBe('2 producten worden toegevoegd');
+		expect(counted('en', 2)).toBe('2 products will be added');
+		expect(counted('de', 2)).toBe('2 Produkte werden hinzugefügt');
+		// A count never appears twice.
+		for (const lang of LANGUAGES) expect(counted(lang, 3)).not.toMatch(/3.*\b3\b/);
+	});
+});
+
 describe('household language', () => {
 	it('defaults to English, also for existing installations', () => {
 		expect(DEFAULT_LANGUAGE).toBe('en');

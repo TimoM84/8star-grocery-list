@@ -809,7 +809,7 @@ export const nl: Messages = {
 				action: 'removed' | 'added' | 'updated',
 				preview: boolean
 			) =>
-				`${counted} ${preview ? plural(n, 'wordt ', 'worden ') : ''}${{ removed: 'verwijderd', added: 'toegevoegd', updated: 'bijgewerkt' }[action]}`,
+				`${counted} ${preview ? (n === 1 ? 'wordt ' : 'worden ') : ''}${{ removed: 'verwijderd', added: 'toegevoegd', updated: 'bijgewerkt' }[action]}`,
 			matched: (counted: string) => `${counted} al aanwezig`,
 			duplicates: (n: number) => `${n} dubbel (overgeslagen)`,
 			skipped: (n: number) => `${n} overgeslagen`,

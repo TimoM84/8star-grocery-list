@@ -1,13 +1,18 @@
 import { expect, type Page, type APIRequestContext } from '@playwright/test';
 
-export async function resetServer(request: APIRequestContext) {
+/**
+ * Wipes the server. Most specs check the Dutch wording, so the household language is set to
+ * Dutch unless another one is asked for (a fresh install itself defaults to English).
+ */
+export async function resetServer(request: APIRequestContext, language = 'nl') {
 	const res = await request.post('/api/test/reset');
 	expect(res.ok()).toBeTruthy();
+	if (language !== 'en') await postOps(request, [{ type: 'settings.update', language }]);
 }
 
 /** Opens the app with a clean server and clean local storage. */
-export async function freshApp(page: Page, path = '/') {
-	await resetServer(page.request);
+export async function freshApp(page: Page, path = '/', language = 'nl') {
+	await resetServer(page.request, language);
 	// Clear storage from a same-origin page that doesn't run the app.
 	await page.goto('/api/health');
 	await page.evaluate(async () => {

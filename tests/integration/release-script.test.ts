@@ -19,7 +19,11 @@ case "$1 $2" in
 		if [[ "$*" == *nameWithOwner* ]]; then echo "TimoM84/8star-grocery-list"; else echo "main"; fi ;;
 	"release view") [ -f "$STUB_DIR/release-exists" ] && exit 0 || exit 1 ;;
 	"release create") cp "\${@: -1}" "$STUB_DIR/notes.md"; echo created >> "$STUB_DIR/created" ;;
-	api*) cat "$STUB_DIR/checks" ;;
+	api*)
+		# checks.N (if present) answers the N-th call, so tests can let CI finish while waiting.
+		n=$(( $(cat "$STUB_DIR/api-count" 2>/dev/null || echo 0) + 1 ))
+		echo "$n" > "$STUB_DIR/api-count"
+		if [ -f "$STUB_DIR/checks.$n" ]; then cat "$STUB_DIR/checks.$n"; else cat "$STUB_DIR/checks"; fi ;;
 	*) echo "unexpected gh call: $*" >&2; exit 9 ;;
 esac
 `;
@@ -67,7 +71,7 @@ function setup(): Env {
 	return { dir, stub, work, origin };
 }
 
-function release(env: Env, args: string[], input = '') {
+function release(env: Env, args: string[], input = '', extra: Record<string, string> = {}) {
 	const r = spawnSync('bash', [SCRIPT, ...args], {
 		cwd: env.work,
 		input,
@@ -75,7 +79,9 @@ function release(env: Env, args: string[], input = '') {
 		env: {
 			...process.env,
 			PATH: `${path.join(env.stub, 'bin')}:${process.env.PATH}`,
-			STUB_DIR: env.stub
+			STUB_DIR: env.stub,
+			CI_POLL_SECONDS: '0',
+			...extra
 		}
 	});
 	return { code: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
@@ -105,6 +111,51 @@ describe('scripts/release.sh', () => {
 			/gh release create v1\.1\.0 --repo TimoM84\/8star-grocery-list --verify-tag/
 		);
 		expect(log).toContain(`commits/${head}/check-runs`);
+	});
+
+	it('--yes publishes without asking (used by the Release workflow)', () => {
+		const r = release(env, ['v1.1.0', '--yes']);
+		expect(r.code, r.out).toBe(0);
+		expect(r.out).toContain('Confirmed with --yes');
+		expect(remoteTags(env)).toBe('v1.1.0');
+		expect(fs.existsSync(path.join(env.stub, 'created'))).toBe(true);
+	});
+
+	it('--wait-for-ci waits until CI finished for the commit, ignoring its own job', () => {
+		fs.writeFileSync(path.join(env.stub, 'checks.1'), '');
+		fs.writeFileSync(
+			path.join(env.stub, 'checks.2'),
+			'Typecheck, lint, unit, build, Playwright\tin_progress\t\nPublish release\tin_progress\t\n'
+		);
+		fs.writeFileSync(
+			path.join(env.stub, 'checks'),
+			'Typecheck, lint, unit, build, Playwright\tcompleted\tsuccess\nPublish release\tin_progress\t\nPublish release\tcompleted\tfailure\n'
+		);
+		const r = release(env, ['v1.1.0', '--yes', '--wait-for-ci', '60'], '', {
+			IGNORE_CHECK: 'Publish release'
+		});
+		expect(r.code, r.out).toBe(0);
+		expect(r.out).toContain('no GitHub Actions checks for this commit yet');
+		expect(r.out).toContain('Waiting 0s for GitHub Actions');
+		expect(r.out).not.toContain('Publish release');
+		expect(remoteTags(env)).toBe('v1.1.0');
+	});
+
+	it('--wait-for-ci stops at the first failed check and at the time limit', () => {
+		fs.writeFileSync(path.join(env.stub, 'checks.1'), 'Docker\tin_progress\t\n');
+		fs.writeFileSync(path.join(env.stub, 'checks'), 'Docker\tcompleted\tfailure\n');
+		const failed = release(env, ['v1.1.0', '--yes', '--wait-for-ci', '60']);
+		expect(failed.code).toBe(1);
+		expect(failed.out).toMatch(/must have passed/);
+
+		fs.writeFileSync(path.join(env.stub, 'checks'), 'Docker\tin_progress\t\n');
+		const slow = release(env, ['v1.1.0', '--yes', '--wait-for-ci', '60'], '', {
+			CI_WAIT_SECONDS: '0'
+		});
+		expect(slow.code).toBe(1);
+		expect(slow.out).toMatch(/did not finish .* within 60 minutes; nothing was released/);
+		expect(remoteTags(env)).toBe('');
+		expect(fs.existsSync(path.join(env.stub, 'created'))).toBe(false);
 	});
 
 	it('does nothing without the typed confirmation', () => {
@@ -200,6 +251,21 @@ describe('scripts/release.sh', () => {
 			(e: Env) => fs.writeFileSync(path.join(e.stub, 'checks'), 'Docker\tin_progress\t\n'),
 			/must have passed/
 		],
+		[
+			'stale version in compose.yaml',
+			['v1.1.0', '--dry-run'],
+			(e: Env) => {
+				fs.writeFileSync(
+					path.join(e.work, 'compose.yaml'),
+					'services:\n  app:\n    image: x:${APP_VERSION:-1.0.0}\n'
+				);
+				git(e.work, 'add', '.');
+				git(e.work, 'commit', '-qm', 'compose');
+				git(e.work, 'push', '-q');
+			},
+			/compose\.yaml still names another version/
+		],
+		['unknown option', ['v1.1.0', '--force'], () => {}, /Usage/],
 		[
 			'no CI at all',
 			['v1.1.0', '--dry-run'],
