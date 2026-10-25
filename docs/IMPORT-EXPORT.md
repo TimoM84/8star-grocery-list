@@ -8,7 +8,8 @@ source of truth); exports are plain downloads.
 
 | Download                | API                                          | Content                                                                                                          |
 | ----------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Volledige export (JSON) | `GET /api/export?format=json`                | Everything, restorable (format below)                                                                            |
+| Volledige back-up (ZIP) | `GET /api/export?format=backup`              | Everything including the photo files; the best file to restore (format below)                                    |
+| Volledige export (JSON) | `GET /api/export?format=json`                | All data, restorable, but photo **metadata only** (no image bytes)                                               |
 | Alles als CSV (ZIP)     | `GET /api/export?format=zip`                 | `purchases.csv`, `products.csv`, `statistics.csv`, `lists.csv`, `categories.csv`, `list-items.csv`, `README.txt` |
 | Aankopen (CSV)          | `GET /api/export?format=csv&type=purchases`  | One row per purchase event                                                                                       |
 | Producten (CSV)         | `GET /api/export?format=csv&type=products`   | Products with stable ids                                                                                         |
@@ -17,22 +18,66 @@ source of truth); exports are plain downloads.
 
 Other CSV datasets: `type=lists`, `type=categories`, `type=list-items`.
 
+### What each format contains
+
+| Format          | Lists, products, history, notes, bundles, aliases, stock | Photo files | Restorable |
+| --------------- | -------------------------------------------------------- | ----------- | ---------- |
+| Back-up (ZIP)   | yes                                                      | yes         | yes        |
+| Export (JSON)   | yes                                                      | no (ids)    | yes¹       |
+| CSV / CSV (ZIP) | purchases, products, statistics, lists, list items       | no          | partially² |
+
+¹ Restoring a JSON export keeps photo references for photos that are still on the server; for
+missing ones the product simply has no photo (the report says how many).
+² CSV imports add products and purchase history; they are not a full restore.
+
+**Never exported** (temporary or device-local, rebuilt or simply absent after a restore): active
+shopping rounds and participants, “Ik pak dit” claims, device names, shared “Niet nu” snoozes,
+the sync operation log and id aliases. A restore ends any running round.
+
 CSV files are UTF-8 with BOM, use `;` as separator and a decimal comma, so they open directly in
 Dutch Excel. In Python: `pd.read_csv("purchases.csv", sep=";", decimal=",")`. All timestamps are
 ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`).
 
-### JSON export format (version 1)
+### Full backup ZIP (`8star-grocery-backup`, version 1)
+
+```
+manifest.json      { "format": "8star-grocery-backup", "formatVersion": 1, "app": {…},
+                     "createdAt": "…", "contents": {…counts…}, "notIncluded": [...],
+                     "missingPhotos": [...] }
+export.json        the JSON export below (format 2)
+media/<id>.<ext>   one file per photo (jpg/png/webp), stored uncompressed
+```
+
+Import it like a JSON export (Beheer → Gegevens → Importeren, or `kind=json` in the API); the
+server recognises the ZIP. Every photo is validated again (type, size, pixel limits, checksum
+against the metadata) before anything is written, and the whole import is one transaction.
+Photos already on the server are kept; files are written atomically.
+
+### JSON export format (version 2)
+
+Version 2 (v1.2.0) adds the fields marked below. Version 1 files (v1.1.0) and the raw v1.0.0
+exports still import; missing fields get safe defaults (list type `grocery`, stock `unknown`,
+no notes, no photo).
 
 ```jsonc
 {
 	"format": "8star-grocery-export",
-	"formatVersion": 1,
-	"app": { "name": "8star-grocery-list", "version": "1.1.0" },
-	"databaseSchemaVersion": 3,
+	"formatVersion": 2,
+	"app": { "name": "8star-grocery-list", "version": "1.2.0" },
+	"databaseSchemaVersion": 4,
 	"exportedAt": "2026-10-24T20:00:00.000Z",
 	"data": {
 		"lists": [
-			{ "id": "default", "name": "Boodschappen", "position": 0, "createdAt": "…", "updatedAt": "…" }
+			{
+				"id": "default",
+				"name": "Boodschappen",
+				"position": 0,
+				"kind": "grocery", // v2: "grocery" | "checklist"
+				"kindChangedAt": null, // v2
+				"categoryOrder": null, // v2: walking route (category ids) or null = global order
+				"createdAt": "…",
+				"updatedAt": "…"
+			}
 		],
 		"categories": [
 			{
@@ -49,8 +94,40 @@ ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`).
 				"name": "Halfvolle melk",
 				"categoryId": "cat-zuivel",
 				"favorite": true,
+				"defaultQuantity": 2, // v2: usual quantity
+				"defaultUnit": "l", // v2
+				"preferredListId": "default", // v2
+				"note": "ongezouten", // v2: fixed product note
+				"photoId": "m-…", // v2: see "media"
+				"stockStatus": "low", // v2: unknown | enough | low | out
+				"stockUpdatedAt": "…", // v2
 				"createdAt": "…",
 				"updatedAt": "…"
+			}
+		],
+		"productAliases": [{ "id": "a-…", "productId": "p-…", "alias": "Melk", "createdAt": "…" }], // v2
+		"bundles": [
+			// v2
+			{
+				"id": "b-…",
+				"name": "Lasagne",
+				"servings": 4,
+				"createdAt": "…",
+				"updatedAt": "…",
+				"lines": [{ "id": "l-…", "productId": "p-…", "quantity": 500, "unit": "g", "note": null }]
+			}
+		],
+		"media": [
+			// v2: metadata; the bytes are in the backup ZIP under media/<file>
+			{
+				"id": "m-…",
+				"mime": "image/jpeg",
+				"width": 1200,
+				"height": 900,
+				"bytes": 183422,
+				"sha256": "…",
+				"createdAt": "…",
+				"file": "m-….jpg"
 			}
 		],
 		"listItems": [
@@ -64,6 +141,11 @@ ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`).
 				"activatedAt": "…",
 				"completedAt": null,
 				"purchaseEventId": "c-…",
+				"note": "voor zaterdag", // v2: note for this purchase
+				"substituteOk": true, // v2: another brand/product is fine
+				"substituteNote": null, // v2
+				"unavailableAt": null, // v2: "Niet verkrijgbaar" since
+				"position": 1, // v2: manual order (checklists)
 				"createdAt": "…",
 				"updatedAt": "…"
 			}
@@ -78,7 +160,9 @@ ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`).
 				"completedAt": "…",
 				"cancelledAt": null,
 				"quantity": 2,
-				"unit": "l"
+				"unit": "l",
+				"requestedQuantity": 3, // v2: what was asked
+				"purchasedQuantity": 2 // v2: what was bought (partial purchases)
 			}
 		],
 		"aiRecommendations": [
@@ -132,13 +216,17 @@ rolls back, so it always matches the real result. Results are shown as readable 
 
 ### Duplicate detection and merge rules
 
-| Data             | Matched by                                                      | When matched                                                       |
-| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Lists/categories | id, then name (case-insensitive)                                | existing kept                                                      |
-| Products         | id, then name (case- and whitespace-insensitive)                | existing kept; favourite is added, a missing category is filled in |
-| Purchase events  | id, then same product + same purchase/cancel time (CSV: ±1 min) | skipped as duplicate (never counted twice)                         |
-| List items       | same list + same product                                        | the server's current list wins                                     |
-| AI suggestions   | id or identical content                                         | skipped as duplicate                                               |
+| Data             | Matched by                                                      | When matched                                                        |
+| ---------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Lists/categories | id, then name (case-insensitive)                                | existing kept                                                       |
+| Products         | id, then name (case- and whitespace-insensitive)                | existing kept; favourite is added, a missing category is filled in  |
+| Purchase events  | id, then same product + same purchase/cancel time (CSV: ±1 min) | skipped as duplicate (never counted twice)                          |
+| List items       | same list + same product                                        | the server's current list wins                                      |
+| AI suggestions   | id or identical content                                         | skipped as duplicate                                                |
+| Aliases          | id, then name                                                   | skipped when the name is already used (never merges products)       |
+| Bundles          | id, then name                                                   | existing kept                                                       |
+| Product memory   | with the product                                                | only empty fields are filled (usual quantity, note, preferred list) |
+| Photos           | id + checksum                                                   | existing kept; a different file under the same id is refused        |
 
 Importing the same file twice therefore changes nothing the second time.
 
@@ -200,7 +288,7 @@ See also [SYNC.md](SYNC.md).
 POST /api/import?kind=json|products-csv|purchases-csv|ai&mode=merge|replace[&preview=1]
 Content-Type: application/octet-stream
 X-Confirm-Replace: VERVANGEN          # required for mode=replace without preview
-<raw file content, max 25 MB>
+<raw file content (JSON, CSV or backup ZIP), max 100 MB>
 ```
 
 Responses: `200` with a report when the import succeeded (or the preview is valid), `422` with a

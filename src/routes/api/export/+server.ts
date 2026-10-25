@@ -1,12 +1,19 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { getRuntime } from '$lib/server/runtime';
-import { CSV_DATASETS, csvFor, exportJson, exportZip, type CsvDataset } from '$lib/server/export';
+import {
+	CSV_DATASETS,
+	csvFor,
+	exportBackupZip,
+	exportJson,
+	exportZip,
+	type CsvDataset
+} from '$lib/server/export';
 import { exportData } from '$lib/server/transfer/format';
 import { AI_PROMPT } from '$lib/server/transfer/ai-prompt';
 
 export const GET: RequestHandler = ({ url }) => {
-	const { db } = getRuntime();
+	const { db, media } = getRuntime();
 	const format = url.searchParams.get('format') ?? 'json';
 	const date = new Date().toISOString().slice(0, 10);
 	const download = (body: BodyInit, type: string, name: string) =>
@@ -23,6 +30,13 @@ export const GET: RequestHandler = ({ url }) => {
 			JSON.stringify(exportJson(db, __APP_VERSION__), null, 2),
 			'application/json; charset=utf-8',
 			`8star-export-${date}.json`
+		);
+	}
+	if (format === 'backup') {
+		return download(
+			new Uint8Array(exportBackupZip(db, media, __APP_VERSION__)),
+			'application/zip',
+			`8star-backup-${date}.zip`
 		);
 	}
 	if (format === 'zip') {

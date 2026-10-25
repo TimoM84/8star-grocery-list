@@ -15,6 +15,8 @@ import {
 	type ImportItem
 } from './format';
 import { CsvError, hasColumn, pick, readCsvTable } from './csv';
+import { readZip, ZipError } from './zip';
+import { MediaError, sanitizeImage, type MediaStore } from '../media';
 import { normaliseUnit } from '$lib/shared/quantity';
 import { capitaliseFirst, cleanName, MAX_NAME_LENGTH, nameKey } from '$lib/shared/text';
 
@@ -26,12 +28,58 @@ export interface ImportOptions {
 	kind: ImportKind;
 	mode: ImportMode;
 	text: string;
+	/** Raw upload; a ZIP (full backup with photos) is detected by its signature. */
+	bytes?: Buffer;
 	preview: boolean;
 	backupDir: string;
+	/** Needed to restore photos from a full backup. */
+	media?: MediaStore;
 	now?: number;
 }
 
+/** Full backup ZIP: manifest + export.json + media/*. See docs/IMPORT-EXPORT.md. */
+export const BACKUP_FORMAT = '8star-grocery-backup';
+export const BACKUP_FORMAT_VERSION = 1;
+
+interface BackupContents {
+	exportText: string;
+	files: Map<string, Buffer>;
+}
+
+function readBackupZip(bytes: Buffer): BackupContents {
+	let entries: Map<string, Buffer>;
+	try {
+		entries = readZip(bytes);
+	} catch (e) {
+		throw new ImportRejected(
+			'Het ZIP-bestand kan niet worden gelezen: ' +
+				(e instanceof ZipError ? e.message : 'onbekende fout')
+		);
+	}
+	const manifestRaw = entries.get('manifest.json');
+	if (!manifestRaw)
+		throw new ImportRejected(
+			'Dit ZIP-bestand is geen 8star-back-up (manifest.json ontbreekt). CSV-ZIP-exports kunnen niet worden hersteld.'
+		);
+	let manifest: { format?: unknown; formatVersion?: unknown };
+	try {
+		manifest = JSON.parse(manifestRaw.toString('utf8'));
+	} catch {
+		throw new ImportRejected('manifest.json is geen geldige JSON.');
+	}
+	if (manifest.format !== BACKUP_FORMAT)
+		throw new ImportRejected(`Onbekend back-upformaat (verwacht "${BACKUP_FORMAT}").`);
+	if (typeof manifest.formatVersion !== 'number' || manifest.formatVersion > BACKUP_FORMAT_VERSION)
+		throw new ImportRejected(
+			`Back-upversie ${String(manifest.formatVersion)} wordt niet ondersteund; werk de app bij.`
+		);
+	const exportRaw = entries.get('export.json');
+	if (!exportRaw) throw new ImportRejected('export.json ontbreekt in de back-up.');
+	return { exportText: exportRaw.toString('utf8'), files: entries };
+}
+
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const newId = (prefix: string) => `${prefix}-${randomBytes(9).toString('base64url')}`;
 
 class PreviewRollback extends Error {}
@@ -43,7 +91,10 @@ const LABELS: Record<string, [string, string]> = {
 	products: ['product', 'producten'],
 	listItems: ['item op een lijst', 'items op lijsten'],
 	purchaseEvents: ['aankoop', 'aankopen'],
-	aiRecommendations: ['AI-suggestie', 'AI-suggesties']
+	aiRecommendations: ['AI-suggestie', 'AI-suggesties'],
+	productAliases: ['zoekwoord', 'zoekwoorden'],
+	bundles: ['bundel', 'bundels'],
+	media: ['foto', 'foto’s']
 };
 
 function counter(): Counter {
@@ -94,10 +145,14 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 	try {
 		// Parse and validate everything before touching the database.
 		let apply: () => void;
+		let backup: BackupContents | null = null;
+		if (kind === 'json' && options.bytes && options.bytes.subarray(0, 4).equals(ZIP_MAGIC)) {
+			backup = readBackupZip(options.bytes);
+		}
 		if (kind === 'json' || kind === 'ai') {
 			let parsed: unknown;
 			try {
-				parsed = JSON.parse(options.text.replace(/^\ufeff/, ''));
+				parsed = JSON.parse((backup?.exportText ?? options.text).replace(/^\ufeff/, ''));
 			} catch {
 				throw new ImportRejected('Het bestand is geen geldige JSON.');
 			}
@@ -111,10 +166,12 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 				}
 				if (mode === 'replace' && !data.lists.length)
 					throw new ImportRejected('Een volledige vervanging heeft minstens één lijst nodig.');
-				apply = () =>
-					mode === 'replace'
-						? replaceAll(store, data, count, now)
-						: mergeDataset(store, data, count, report, now);
+				const photos = preparePhotos(store, data, backup, options, report, count);
+				apply = () => {
+					photos();
+					if (mode === 'replace') replaceAll(store, data, count, now);
+					else mergeDataset(store, data, count, report, now);
+				};
 			} else {
 				apply = prepareAiImport(store, parsed, count, report, now);
 			}
@@ -177,64 +234,49 @@ function replaceAll(
 	count('listItems').removed = existing('items');
 	count('purchaseEvents').removed = existing('cycles');
 	count('aiRecommendations').removed = existing('ai_recommendations');
+	count('productAliases').removed = existing('product_aliases');
+	count('bundles').removed = existing('bundles');
 
-	db.exec(`DELETE FROM items; DELETE FROM cycles; DELETE FROM ai_recommendations;
+	// Photos are kept on disk (and in `media`) until the periodic cleanup: a later undo or
+	// restore can still need them. Rounds, claims and snoozes are temporary and not restored.
+	db.exec(`DELETE FROM claims; DELETE FROM rounds; DELETE FROM snoozes;
+		DELETE FROM bundle_lines; DELETE FROM bundles; DELETE FROM product_aliases;
+		DELETE FROM items; DELETE FROM cycles; DELETE FROM ai_recommendations;
 		DELETE FROM products; DELETE FROM categories; DELETE FROM lists;`);
 
-	const insList = (table: 'lists' | 'categories') =>
-		db.prepare(
-			`INSERT INTO ${table} (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
-		);
-	for (const l of d.lists) insList('lists').run(l.id, l.name, l.position, l.createdAt, l.updatedAt);
-	for (const c of d.categories)
-		insList('categories').run(c.id, c.name, c.position, c.createdAt, c.updatedAt);
-	const insProduct = db.prepare(
-		'INSERT INTO products (id, name, name_key, category_id, favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+	const insList = db.prepare(
+		`INSERT INTO lists (id, name, position, created_at, updated_at, kind, kind_changed_at, category_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	);
-	for (const p of d.products)
-		insProduct.run(
-			p.id,
-			p.name,
-			nameKey(p.name),
-			p.categoryId,
-			p.favorite ? 1 : 0,
-			p.createdAt,
-			p.updatedAt
+	for (const l of d.lists)
+		insList.run(
+			l.id,
+			l.name,
+			l.position,
+			l.createdAt,
+			l.updatedAt,
+			l.kind,
+			l.kindChangedAt,
+			l.categoryOrder ? JSON.stringify(l.categoryOrder) : null
 		);
-	const insEvent = db.prepare(
-		'INSERT INTO cycles (id, product_id, list_id, activated_at, completed_at, cancelled_at, quantity, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+	const insCat = db.prepare(
+		`INSERT INTO categories (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
 	);
-	for (const e of d.purchaseEvents)
-		insEvent.run(
-			e.id,
-			e.productId,
-			e.listId,
-			e.activatedAt,
-			e.completedAt,
-			e.cancelledAt,
-			e.quantity,
-			e.unit
-		);
-	const insItem = db.prepare(
-		`INSERT INTO items (id, list_id, product_id, quantity, unit, status, activated_at, completed_at, cycle_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	);
-	for (const i of d.listItems)
-		insItem.run(
-			i.id,
-			i.listId,
-			i.productId,
-			i.quantity,
-			i.unit,
-			i.status,
-			i.activatedAt,
-			i.completedAt,
-			i.purchaseEventId,
-			i.createdAt,
-			i.updatedAt
-		);
+	for (const c of d.categories) insCat.run(c.id, c.name, c.position, c.createdAt, c.updatedAt);
+	const insProduct = productInserter(store);
+	for (const p of d.products) insProduct(p, p.categoryId);
+	const insEvent = eventInserter(store);
+	for (const e of d.purchaseEvents) insEvent(e, e.productId, e.listId);
+	const insItem = itemInserter(store);
+	for (const i of d.listItems) insItem(i, i.id, i.listId, i.productId, i.purchaseEventId);
 	const insRec = recommendationInserter(store);
 	for (const r of d.aiRecommendations) insRec({ ...r, fingerprint: fingerprint(r) });
+	const insAlias = aliasInserter(store);
+	for (const a of d.productAliases) insAlias(a, a.productId);
+	const insBundle = bundleInserter(store);
+	for (const b of d.bundles) insBundle(b, b.id, (id) => id);
+	count('productAliases').added = d.productAliases.length;
+	count('bundles').added = d.bundles.length;
 
 	count('lists').added = d.lists.length;
 	count('categories').added = d.categories.length;
@@ -246,13 +288,175 @@ function replaceAll(
 	store.markDatasetReplaced(now);
 }
 
+function productInserter(store: GroceryStore) {
+	const stmt = store.db.prepare(
+		`INSERT INTO products (id, name, name_key, category_id, favorite, created_at, updated_at, default_quantity,
+			default_unit, preferred_list_id, note, photo_id, stock_status, stock_updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	);
+	return (
+		p: ImportDataset['products'][number],
+		categoryId: string | null,
+		listId = p.preferredListId
+	) =>
+		stmt.run(
+			p.id,
+			p.name,
+			nameKey(p.name),
+			categoryId,
+			p.favorite ? 1 : 0,
+			p.createdAt,
+			p.updatedAt,
+			p.defaultQuantity,
+			p.defaultUnit,
+			listId,
+			p.note,
+			p.photoId,
+			p.stockStatus,
+			p.stockUpdatedAt
+		);
+}
+
+function eventInserter(store: GroceryStore) {
+	const stmt = store.db.prepare(
+		`INSERT INTO cycles (id, product_id, list_id, activated_at, completed_at, cancelled_at, quantity, unit,
+			requested_quantity, purchased_quantity, last_purchase_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	);
+	return (e: ImportDatasetEvent, productId: string, listId: string | null, id = e.id) =>
+		stmt.run(
+			id,
+			productId,
+			listId,
+			e.activatedAt,
+			e.completedAt,
+			e.cancelledAt,
+			e.quantity,
+			e.unit,
+			e.requestedQuantity,
+			e.purchasedQuantity,
+			e.completedAt ?? (e.purchasedQuantity ? e.activatedAt : null)
+		);
+}
+
+function itemInserter(store: GroceryStore) {
+	const stmt = store.db.prepare(
+		`INSERT INTO items (id, list_id, product_id, quantity, unit, status, activated_at, completed_at, cycle_id,
+			created_at, updated_at, note, substitute_ok, substitute_note, unavailable_at, position)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	);
+	return (i: ImportItem, id: string, listId: string, productId: string, cycleId: string | null) =>
+		stmt.run(
+			id,
+			listId,
+			productId,
+			i.quantity,
+			i.unit,
+			i.status,
+			i.activatedAt,
+			i.completedAt,
+			cycleId,
+			i.createdAt,
+			i.updatedAt,
+			i.note,
+			i.substituteOk ? 1 : 0,
+			i.substituteNote,
+			i.unavailableAt,
+			i.position
+		);
+}
+
+function aliasInserter(store: GroceryStore) {
+	const stmt = store.db.prepare(
+		'INSERT INTO product_aliases (id, product_id, alias, alias_key, created_at) VALUES (?, ?, ?, ?, ?)'
+	);
+	return (a: ImportDataset['productAliases'][number], productId: string, id = a.id) =>
+		stmt.run(id, productId, a.alias, nameKey(a.alias), a.createdAt);
+}
+
+function bundleInserter(store: GroceryStore) {
+	const bundle = store.db.prepare(
+		'INSERT INTO bundles (id, name, servings, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+	);
+	const line = store.db.prepare(
+		'INSERT INTO bundle_lines (id, bundle_id, product_id, quantity, unit, note, position) VALUES (?, ?, ?, ?, ?, ?, ?)'
+	);
+	return (
+		b: ImportDataset['bundles'][number],
+		id: string,
+		product: (id: string) => string,
+		lineId: (id: string) => string = (x) => x
+	) => {
+		bundle.run(id, b.name, b.servings, b.createdAt, b.updatedAt);
+		b.lines.forEach((l, i) =>
+			line.run(lineId(l.id), id, product(l.productId), l.quantity, l.unit, l.note, i)
+		);
+	};
+}
+
+/**
+ * Photos of a full backup are validated up front (same rules as uploads) and written inside
+ * the import transaction; a preview never writes files. Photo references without bytes (a
+ * plain JSON export) are kept only when the photo already exists on this server.
+ */
+function preparePhotos(
+	store: GroceryStore,
+	d: ImportDataset,
+	backup: BackupContents | null,
+	options: ImportOptions,
+	report: ImportReport,
+	count: (k: string) => Counter
+): () => void {
+	const available = new Map<string, { data: Buffer; createdAt: number }>();
+	for (const m of d.media) {
+		const data = backup?.files.get(m.file);
+		if (!data) continue;
+		try {
+			sanitizeImage(data);
+			available.set(m.id, { data, createdAt: m.createdAt });
+		} catch (e) {
+			report.warnings.push(
+				`Foto ${m.id} is overgeslagen: ${e instanceof MediaError ? e.message : 'onleesbaar'}`
+			);
+		}
+	}
+	// Without a media store (never in the app itself) photos cannot be written.
+	if (!options.media && !options.preview) available.clear();
+	let missing = 0;
+	for (const p of d.products) {
+		if (!p.photoId) continue;
+		const exists = !!store.db.prepare('SELECT 1 FROM media WHERE id = ?').get(p.photoId);
+		if (!available.has(p.photoId) && !exists) {
+			p.photoId = null;
+			missing++;
+		}
+	}
+	if (missing)
+		report.warnings.push(
+			`${missing} productfoto${missing === 1 ? '' : '’s'} niet in dit bestand: alleen de volledige back-up (ZIP) bevat foto’s.`
+		);
+	return () => {
+		for (const [id, m] of available) {
+			if (options.preview || !options.media) {
+				// Preview: a placeholder row satisfies the foreign key; the transaction rolls back.
+				store.db
+					.prepare(
+						"INSERT OR IGNORE INTO media (id, mime, width, height, bytes, sha256, created_at) VALUES (?, 'image/jpeg', 1, 1, 0, '', ?)"
+					)
+					.run(id, m.createdAt);
+			} else options.media.restore(id, m.data, m.createdAt);
+			count('media').added++;
+		}
+	};
+}
+
 // ------------------------------------------------------------------ merge
 
 interface Row {
 	[k: string]: unknown;
 }
 
-function nameIndex(store: GroceryStore, table: 'lists' | 'categories' | 'products') {
+function nameIndex(store: GroceryStore, table: 'lists' | 'categories' | 'products' | 'bundles') {
 	const byKey = new Map<string, string>();
 	for (const r of store.db.prepare(`SELECT id, name FROM ${table}`).all() as Row[])
 		byKey.set(nameKey(r.name as string), r.id as string);
@@ -305,35 +509,122 @@ function mergeDataset(
 			db.prepare(
 				`INSERT INTO ${table} (id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
 			).run(r.id, r.name, position++, r.createdAt, r.updatedAt);
+			if (table === 'lists' && 'kind' in r)
+				db.prepare('UPDATE lists SET kind = ?, kind_changed_at = ? WHERE id = ?').run(
+					r.kind,
+					r.kindChangedAt,
+					r.id
+				);
 			byName.set(nameKey(r.name), r.id);
 			map.set(r.id, r.id);
 			count(key).added++;
 		}
 	}
 
+	// A walking route of a newly added list, translated to this server's categories.
+	for (const l of d.lists) {
+		if (!l.categoryOrder || listMap.get(l.id) !== l.id || count('lists').added === 0) continue;
+		const row = exists(store, 'lists', l.id);
+		if (row && row.category_order === null) {
+			const ids = l.categoryOrder.map((c) => catMap.get(c)).filter((c): c is string => !!c);
+			if (ids.length)
+				db.prepare('UPDATE lists SET category_order = ? WHERE id = ?').run(
+					JSON.stringify(ids),
+					l.id
+				);
+		}
+	}
+
 	const productsByName = nameIndex(store, 'products');
+	const aliasKeys = new Map(
+		(db.prepare('SELECT alias_key, product_id FROM product_aliases').all() as Row[]).map((r) => [
+			r.alias_key as string,
+			r.product_id as string
+		])
+	);
+	const insProduct = productInserter(store);
 	for (const p of d.products) {
 		const categoryId = p.categoryId ? (catMap.get(p.categoryId) ?? null) : null;
-		const target = exists(store, 'products', p.id) ? p.id : productsByName.get(nameKey(p.name));
+		const preferred = p.preferredListId ? (listMap.get(p.preferredListId) ?? null) : null;
+		const target =
+			(exists(store, 'products', p.id) ? p.id : undefined) ??
+			productsByName.get(nameKey(p.name)) ??
+			aliasKeys.get(nameKey(p.name));
 		if (target) {
 			productMap.set(p.id, target);
+			// Existing data wins; only empty fields are filled in from the file.
 			const current = exists(store, 'products', target)!;
-			const fav = current.favorite === 1 || p.favorite;
-			const cat = (current.category_id as string | null) ?? categoryId;
-			if (fav !== (current.favorite === 1) || cat !== current.category_id) {
+			const next = {
+				favorite: current.favorite === 1 || p.favorite ? 1 : 0,
+				category_id: (current.category_id as string | null) ?? categoryId,
+				default_quantity: (current.default_quantity as number | null) ?? p.defaultQuantity,
+				default_unit: current.default_quantity !== null ? current.default_unit : p.defaultUnit,
+				preferred_list_id: (current.preferred_list_id as string | null) ?? preferred,
+				note: (current.note as string | null) ?? p.note,
+				photo_id: (current.photo_id as string | null) ?? p.photoId,
+				stock_status:
+					current.stock_status === 'unknown' ? p.stockStatus : (current.stock_status as string),
+				stock_updated_at:
+					current.stock_status === 'unknown' ? p.stockUpdatedAt : current.stock_updated_at
+			};
+			const changed = (Object.keys(next) as (keyof typeof next)[]).some(
+				(k) => (next[k] ?? null) !== (current[k] ?? null)
+			);
+			if (changed) {
 				db.prepare(
-					'UPDATE products SET favorite = ?, category_id = ?, version = version + 1, updated_at = ? WHERE id = ?'
-				).run(fav ? 1 : 0, cat, now, target);
+					`UPDATE products SET favorite = ?, category_id = ?, default_quantity = ?, default_unit = ?,
+						preferred_list_id = ?, note = ?, photo_id = ?, stock_status = ?, stock_updated_at = ?,
+						version = version + 1, updated_at = ? WHERE id = ?`
+				).run(
+					next.favorite,
+					next.category_id,
+					next.default_quantity,
+					next.default_unit,
+					next.preferred_list_id,
+					next.note,
+					next.photo_id,
+					next.stock_status,
+					next.stock_updated_at,
+					now,
+					target
+				);
 				count('products').updated++;
 			} else count('products').matched++;
 			continue;
 		}
-		db.prepare(
-			'INSERT INTO products (id, name, name_key, category_id, favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-		).run(p.id, p.name, nameKey(p.name), categoryId, p.favorite ? 1 : 0, p.createdAt, p.updatedAt);
+		insProduct(p, categoryId, preferred);
 		productsByName.set(nameKey(p.name), p.id);
 		productMap.set(p.id, p.id);
 		count('products').added++;
+	}
+
+	const insAlias = aliasInserter(store);
+	for (const a of d.productAliases) {
+		const key = nameKey(a.alias);
+		if (aliasKeys.has(key) || productsByName.has(key) || exists(store, 'product_aliases', a.id)) {
+			count('productAliases').duplicates++;
+			continue;
+		}
+		insAlias(a, productMap.get(a.productId)!);
+		aliasKeys.set(key, productMap.get(a.productId)!);
+		count('productAliases').added++;
+	}
+
+	const bundleNames = nameIndex(store, 'bundles');
+	const insBundle = bundleInserter(store);
+	for (const b of d.bundles) {
+		if (exists(store, 'bundles', b.id) || bundleNames.has(nameKey(b.name))) {
+			count('bundles').matched++;
+			continue;
+		}
+		insBundle(
+			b,
+			b.id,
+			(id) => productMap.get(id)!,
+			(id) => freeId(store, 'bundle_lines', id, 'l')
+		);
+		bundleNames.set(nameKey(b.name), b.id);
+		count('bundles').added++;
 	}
 
 	const dedupe = new Set<string>();
@@ -343,9 +634,7 @@ function mergeDataset(
 		if (r.completed_at) dedupe.add(`${r.product_id}|c|${r.completed_at}`);
 		if (r.cancelled_at) dedupe.add(`${r.product_id}|x|${r.cancelled_at}`);
 	}
-	const insEvent = db.prepare(
-		'INSERT INTO cycles (id, product_id, list_id, activated_at, completed_at, cancelled_at, quantity, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-	);
+	const insEvent = eventInserter(store);
 	const openEvents = new Map<string, (typeof d.purchaseEvents)[number]>();
 	for (const e of d.purchaseEvents) {
 		const productId = productMap.get(e.productId)!;
@@ -369,16 +658,7 @@ function mergeDataset(
 		}
 		dedupe.add(key);
 		const listId = e.listId ? (listMap.get(e.listId) ?? null) : null;
-		insEvent.run(
-			e.id,
-			productId,
-			listId,
-			e.activatedAt,
-			e.completedAt,
-			e.cancelledAt,
-			e.quantity,
-			e.unit
-		);
+		insEvent(e, productId, listId);
 		eventMap.set(e.id, e.id);
 		count('purchaseEvents').added++;
 	}
@@ -429,29 +709,12 @@ function mergeItem(
 		const open = openEvents.get(it.purchaseEventId);
 		if (!cycleId && open && it.status === 'active') {
 			cycleId = freeId(store, 'cycles', open.id, 'c');
-			db.prepare(
-				'INSERT INTO cycles (id, product_id, list_id, activated_at, quantity, unit) VALUES (?, ?, ?, ?, ?, ?)'
-			).run(cycleId, productId, listId, open.activatedAt, open.quantity, open.unit);
+			eventInserter(store)(open, productId, listId, cycleId);
 			eventMap.set(open.id, cycleId);
 			count('purchaseEvents').added++;
 		}
 	}
-	db.prepare(
-		`INSERT INTO items (id, list_id, product_id, quantity, unit, status, activated_at, completed_at, cycle_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	).run(
-		freeId(store, 'items', it.id, 'i'),
-		listId,
-		productId,
-		it.quantity,
-		it.unit,
-		it.status,
-		it.activatedAt,
-		it.completedAt,
-		cycleId,
-		it.createdAt,
-		it.updatedAt
-	);
+	itemInserter(store)(it, freeId(store, 'items', it.id, 'i'), listId, productId, cycleId);
 	count('listItems').added++;
 }
 

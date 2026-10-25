@@ -5,6 +5,8 @@ export interface Config {
 	dataDir: string;
 	dbPath: string;
 	backupDir: string;
+	/** Product photos (persistent volume, never the read-only container root). */
+	mediaDir: string;
 	backupIntervalHours: number;
 	backupKeep: number;
 }
@@ -20,6 +22,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 		dataDir,
 		dbPath: path.resolve(env.DB_PATH || path.join(dataDir, 'grocery.db')),
 		backupDir: path.resolve(env.BACKUP_DIR || path.join(dataDir, 'backups')),
+		mediaDir: path.resolve(env.MEDIA_DIR || path.join(dataDir, 'media')),
 		backupIntervalHours: int(env.BACKUP_INTERVAL_HOURS, 24),
 		backupKeep: int(env.BACKUP_KEEP, 14)
 	};

@@ -27,7 +27,8 @@ export async function uploadImport(
 		const res = await fetch(`/api/import?${params}`, {
 			method: 'POST',
 			headers,
-			body: await file.text()
+			// Sent as-is: JSON/CSV text or a full backup ZIP (binary).
+			body: file
 		});
 		if (res.status === 200 || res.status === 422)
 			return { report: (await res.json()) as ImportReport };

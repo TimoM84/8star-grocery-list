@@ -3,7 +3,9 @@
 import type { DB } from './db';
 import { buildExport, exportData, statisticsRows, type ExportData } from './transfer/format';
 import { toCsv } from './transfer/csv';
-import { createZip } from './transfer/zip';
+import { createZip, type ZipEntry } from './transfer/zip';
+import { BACKUP_FORMAT, BACKUP_FORMAT_VERSION } from './transfer/importer';
+import type { MediaStore } from './media';
 
 export { toCsv };
 
@@ -14,6 +16,40 @@ const dec = (n: number | null | undefined) =>
 
 export function exportJson(db: DB, version: string, now = Date.now()) {
 	return buildExport(db, version, now);
+}
+
+/**
+ * Full backup: `manifest.json` (what is inside), `export.json` (export format 2, all data) and
+ * `media/<id>.<ext>` (every photo in use). Restorable via Beheer → Gegevens (replace or merge).
+ */
+export function exportBackupZip(db: DB, media: MediaStore, version: string, now = Date.now()) {
+	const file = buildExport(db, version, now);
+	const photos = media.referenced();
+	const present = new Set(photos.map((p) => p.row.id));
+	const missing = file.data.media.filter((m) => !present.has(m.id)).map((m) => m.id);
+	const manifest = {
+		format: BACKUP_FORMAT,
+		formatVersion: BACKUP_FORMAT_VERSION,
+		app: file.app,
+		databaseSchemaVersion: file.databaseSchemaVersion,
+		exportedAt: file.exportedAt,
+		contents: {
+			'export.json': `${file.format} v${file.formatVersion}: lijsten, categorieën, producten, zoekwoorden, items, aankopen, bundels, AI-suggesties`,
+			media: `${photos.length} foto('s)`
+		},
+		notIncluded: ['winkelrondes', 'claims', 'apparaatnamen', '"Niet nu"-meldingen'],
+		missingPhotos: missing
+	};
+	const entries: ZipEntry[] = [
+		{ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) },
+		{ name: 'export.json', data: JSON.stringify(file, null, 2) },
+		...photos.map((p) => ({
+			name: file.data.media.find((m) => m.id === p.row.id)!.file,
+			data: p.data,
+			store: true
+		}))
+	];
+	return createZip(entries, new Date(now));
 }
 
 export type CsvDataset =

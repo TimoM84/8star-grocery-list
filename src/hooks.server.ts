@@ -16,8 +16,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	});
 	response.headers.set('X-Content-Type-Options', 'nosniff');
 	response.headers.set('Referrer-Policy', 'no-referrer');
+	// The camera is only used through the file picker (capture), never via getUserMedia.
 	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-	if (event.url.pathname.startsWith('/api/')) {
+	if (event.url.pathname.startsWith('/api/media/') && response.ok) {
+		// Photos are immutable per id (cached by the service worker, bounded).
+	} else if (event.url.pathname.startsWith('/api/')) {
 		response.headers.set('Cache-Control', 'no-store');
 	} else if (response.headers.get('content-type')?.startsWith('text/html')) {
 		// Always revalidate the shell so a new theme or release shows up immediately online.

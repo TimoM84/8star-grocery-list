@@ -41,7 +41,7 @@ export default defineConfig({
 			PORT: String(PORT),
 			DATA_DIR,
 			E2E_TEST_MODE: '1',
-			BODY_SIZE_LIMIT: '25M',
+			BODY_SIZE_LIMIT: '100M',
 			BACKUP_INTERVAL_HOURS: '0'
 		}
 	}

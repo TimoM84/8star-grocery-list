@@ -29,7 +29,7 @@ RUN npm run build \
 
 # ---------- 3. runtime ----------
 FROM node:22-bookworm-slim AS runtime
-ARG APP_VERSION=1.1.0
+ARG APP_VERSION=1.2.0
 LABEL org.opencontainers.image.title="8star Grocery List" \
 	org.opencontainers.image.version="${APP_VERSION}" \
 	org.opencontainers.image.source="https://github.com/TimoM84/8star-grocery-list"
@@ -37,7 +37,7 @@ ENV NODE_ENV=production \
 	PORT=3000 \
 	HOST=0.0.0.0 \
 	DATA_DIR=/data \
-	BODY_SIZE_LIMIT=25M
+	BODY_SIZE_LIMIT=100M
 WORKDIR /app
 
 COPY --from=build --chown=node:node /app/build ./build

@@ -10,6 +10,7 @@ import {
 	type ItemView
 } from '$lib/shared/selectors';
 import type { Item, Product, Snapshot } from '$lib/shared/types';
+import { newItem, newList, newProduct } from '$lib/shared/reducer';
 
 const NOW = Date.UTC(2026, 5, 1, 12);
 
@@ -62,36 +63,11 @@ describe('statistics', () => {
 });
 
 function product(id: string, name: string, extra: Partial<Product> = {}): Product {
-	return {
-		id,
-		name,
-		categoryId: null,
-		favorite: false,
-		createdAt: 0,
-		updatedAt: 0,
-		version: 1,
-		purchaseCount: 0,
-		completions: [],
-		firstCompletedAt: null,
-		...extra
-	};
+	return { ...newProduct(id, name, 0), ...extra };
 }
 
 function item(id: string, productId: string, activatedAt: number, extra: Partial<Item> = {}): Item {
-	return {
-		id,
-		listId: 'l',
-		productId,
-		quantity: null,
-		unit: null,
-		status: 'active',
-		activatedAt,
-		completedAt: null,
-		createdAt: 0,
-		updatedAt: 0,
-		version: 1,
-		...extra
-	};
+	return { ...newItem(id, 'l', productId, activatedAt), createdAt: 0, updatedAt: 0, ...extra };
 }
 
 describe('selectors', () => {
@@ -122,7 +98,7 @@ describe('selectors', () => {
 		seq: 1,
 		epoch: 'e1',
 		serverTime: NOW,
-		lists: [{ id: 'l', name: 'L', position: 0, createdAt: 0, updatedAt: 0 }],
+		lists: [newList('l', 'L', 0)],
 		categories: [],
 		products: [
 			product('m', 'Melk', { completions: weekly, purchaseCount: 4 }),
@@ -131,7 +107,12 @@ describe('selectors', () => {
 			product('b', 'Brood')
 		],
 		items: [item('x', 'b', NOW)],
-		aiRecommendations: []
+		aiRecommendations: [],
+		aliases: [],
+		bundles: [],
+		snoozes: [],
+		rounds: [],
+		claims: []
 	};
 
 	it('autocompletes prefix matches first and skips exact active duplicates', () => {

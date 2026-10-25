@@ -1,40 +1,65 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import type { ItemView } from '$lib/shared/selectors';
+	import type { Claim } from '$lib/shared/types';
 	import { formatQuantity } from '$lib/shared/quantity';
+	import { app } from '$lib/client/app.svelte';
+	import { ui } from '$lib/client/ui.svelte';
 
 	let {
 		view,
 		categoryName = null,
 		highlight = false,
+		isNew = false,
+		claim = null,
+		shopping = false,
 		ontoggle,
 		onedit
 	}: {
 		view: ItemView;
 		categoryName?: string | null;
 		highlight?: boolean;
+		/** Added since the round/winkelstand started ("Net toegevoegd"). */
+		isNew?: boolean;
+		claim?: Claim | null;
+		/** Winkelstand: the side button opens the actions instead of the editor. */
+		shopping?: boolean;
 		ontoggle: () => void;
 		onedit: () => void;
 	} = $props();
 
-	const done = $derived(view.item.status === 'completed');
-	const qty = $derived(formatQuantity(view.item.quantity, view.item.unit));
+	const item = $derived(view.item);
+	const product = $derived(view.product);
+	const done = $derived(item.status === 'completed');
+	const unavailable = $derived(!done && item.unavailableAt !== null);
+	const qty = $derived(formatQuantity(item.quantity, item.unit));
+	const bought = $derived(
+		!done && item.purchasedQuantity ? formatQuantity(item.purchasedQuantity, item.unit) : ''
+	);
+	const claimLabel = $derived(
+		!claim || done
+			? ''
+			: claim.deviceId === app.deviceId
+				? 'Jij pakt dit'
+				: `${claim.deviceName ?? 'Iemand anders'} pakt dit`
+	);
+	const photo = $derived(product.photoId ? app.photoUrl(product.photoId) : null);
 </script>
 
 <div
-	class="flex items-stretch overflow-hidden rounded-2xl border border-transparent transition-colors {done
-		? 'bg-surface/60'
-		: 'bg-surface shadow-card'} {highlight ? 'flash' : ''}"
+	class="flex items-stretch overflow-hidden rounded-2xl border transition-colors {done
+		? 'border-transparent bg-surface/60'
+		: unavailable
+			? 'border-dashed border-warn/50 bg-surface/80'
+			: 'border-transparent bg-surface shadow-card'} {highlight ? 'flash' : ''}"
 	data-testid="item-row"
-	data-status={view.item.status}
-	data-name={view.product.name}
+	data-status={unavailable ? 'unavailable' : item.status}
+	data-name={product.name}
 >
 	<button
 		type="button"
 		class="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2.5 pr-2 pl-3.5 text-left active:bg-surface-2"
-		aria-label={done
-			? `${view.product.name} terugzetten op de lijst`
-			: `${view.product.name} afvinken`}
+		aria-label={done ? `${product.name} terugzetten op de lijst` : `${product.name} afvinken`}
 		aria-pressed={done}
 		onclick={ontoggle}
 		data-testid="item-toggle"
@@ -53,18 +78,54 @@
 					: 'text-ink'}"
 				data-testid="item-name"
 			>
-				{view.product.name}
-				{#if view.product.favorite && !done}
+				{product.name}
+				{#if product.favorite && !done}
 					<span class="ml-0.5 inline-block align-[-2px] text-star" title="Favoriet">
 						<Icon name="star" size={15} filled stroke={1.5} />
 						<span class="sr-only">favoriet</span>
 					</span>
 				{/if}
+				{#if isNew && !done}
+					<span
+						class="ml-1 inline-block rounded-full bg-accent px-2 py-px align-[2px] text-xs font-bold text-on-accent"
+						data-testid="item-new">Nieuw</span
+					>
+				{/if}
 			</span>
-			{#if categoryName && !done}
-				<span class="block text-sm leading-tight [overflow-wrap:anywhere] text-faint"
-					>{categoryName}</span
-				>
+			{#if !done}
+				{#if item.note || product.note}
+					<span
+						class="block text-sm leading-snug [overflow-wrap:anywhere] text-muted"
+						data-testid="item-note"
+					>
+						{[item.note, product.note].filter(Boolean).join(' · ')}
+					</span>
+				{/if}
+				{#if item.substituteOk || bought || claimLabel || unavailable}
+					<span class="mt-0.5 flex flex-wrap gap-1 text-sm leading-tight">
+						{#if unavailable}
+							<span class="font-semibold text-warn">Niet verkrijgbaar</span>
+						{/if}
+						{#if bought}
+							<span class="font-semibold text-accent" data-testid="item-bought"
+								>{bought} gehaald</span
+							>
+						{/if}
+						{#if item.substituteOk}
+							<span class="text-muted" data-testid="item-substitute"
+								>Ander merk mag{item.substituteNote ? `: ${item.substituteNote}` : ''}</span
+							>
+						{/if}
+						{#if claimLabel}
+							<span class="font-semibold text-accent" data-testid="item-claim">{claimLabel}</span>
+						{/if}
+					</span>
+				{/if}
+				{#if categoryName}
+					<span class="block text-sm leading-tight [overflow-wrap:anywhere] text-faint"
+						>{categoryName}</span
+					>
+				{/if}
 			{/if}
 		</span>
 		{#if qty}
@@ -76,13 +137,24 @@
 			>
 		{/if}
 	</button>
+	{#if photo && !done}
+		<button
+			type="button"
+			class="grid w-12 shrink-0 place-items-center active:bg-surface-2"
+			aria-label="Foto van {product.name} bekijken"
+			onclick={() => ui.openSheet('photo', { productId: product.id })}
+			data-testid="item-photo"
+		>
+			<img src={photo} alt="" class="h-9 w-9 rounded-lg object-cover" loading="lazy" />
+		</button>
+	{/if}
 	<button
 		type="button"
 		class="grid w-12 shrink-0 place-items-center text-faint active:bg-surface-2"
-		aria-label="{view.product.name} bewerken"
+		aria-label={shopping ? `Meer acties voor ${product.name}` : `${product.name} bewerken`}
 		onclick={onedit}
 		data-testid="item-edit"
 	>
-		<Icon name="pencil" size={20} />
+		<Icon name={shopping ? 'more' : 'pencil'} size={20} stroke={shopping ? 3 : 2} />
 	</button>
 </div>

@@ -82,7 +82,7 @@ test('API responses are never cached and health endpoint reports status', async 
 	const res = await request.get('/api/health');
 	expect(res.headers()['cache-control']).toBe('no-store');
 	const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')) as { version: string };
-	expect(await res.json()).toMatchObject({ status: 'ok', version: pkg.version, schemaVersion: 3 });
+	expect(await res.json()).toMatchObject({ status: 'ok', version: pkg.version, schemaVersion: 4 });
 	const reset = await request.post('/api/test/reset');
 	expect(reset.ok()).toBeTruthy();
 });

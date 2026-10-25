@@ -24,6 +24,7 @@ test('manages multiple independent lists and moves items between them', async ({
 
 	// Move Shampoo to the new list.
 	await row(page, 'Shampoo').getByTestId('item-edit').click();
+	await page.getByTestId('edit-more').click();
 	await page.getByTestId('move-list-option').filter({ hasText: 'Kruidvat' }).click();
 	await page.getByTestId('edit-save').click();
 	await expect.poll(() => activeNames(page)).toEqual(['Melk']);
@@ -32,8 +33,10 @@ test('manages multiple independent lists and moves items between them', async ({
 	await expect(page.getByTestId('page-title')).toHaveText('Kruidvat');
 	await expect.poll(() => activeNames(page)).toEqual(['Shampoo']);
 
-	// Same product may live on both lists independently.
+	// Same product may live on both lists independently, after the "elsewhere" prompt.
 	await addItems(page, 'Melk');
+	await expect(page.getByTestId('add-prompt-elsewhere')).toContainText('Boodschappen');
+	await page.getByTestId('add-prompt-also').click();
 	await expect.poll(() => activeNames(page)).toEqual(['Melk', 'Shampoo']);
 	await row(page, 'Melk').getByTestId('item-toggle').click();
 	await page.getByTestId('list-chip').filter({ hasText: 'Boodschappen' }).click();
@@ -79,6 +82,7 @@ test('categories: guessing, ordering and grouping', async ({ page }) => {
 
 	// Assign a category to the unknown product.
 	await row(page, 'Iets onbekends').getByTestId('item-edit').click();
+	await page.getByTestId('edit-more').click();
 	await page.getByTestId('category-option').filter({ hasText: 'Baby' }).click();
 	await page.getByTestId('edit-save').click();
 	await expect(headings).toHaveText(['Verzorging', 'Groente & fruit', 'Zuivel & eieren', 'Baby']);
@@ -91,6 +95,7 @@ test('categories: guessing, ordering and grouping', async ({ page }) => {
 test('favorites can be set and re-added with one tap', async ({ page }) => {
 	await addItems(page, 'Pindakaas');
 	await row(page, 'Pindakaas').getByTestId('item-edit').click();
+	await page.getByTestId('edit-more').click();
 	await page.getByTestId('edit-favorite').click();
 	await page.getByTestId('edit-save').click();
 	await row(page, 'Pindakaas').getByTestId('item-toggle').click();

@@ -1,11 +1,21 @@
 /**
- * Tiny promise wrapper around IndexedDB. Two stores:
+ * Tiny promise wrapper around IndexedDB. Three stores:
  *  - `kv`      : snapshot, client id, aliases, cached history
  *  - `pending` : the durable outbound operation queue (ordered by `seq`)
+ *  - `media`   : photos taken offline, waiting for upload (v2)
  */
 
 const DB_NAME = '8star-grocery';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+/** A photo waiting for upload. Uploaded before the op that attaches it to a product. */
+export interface PendingMedia {
+	id: string;
+	blob: Blob;
+	createdAt: number;
+	/** Set when the server refused the photo (it will not be retried). */
+	error: string | null;
+}
 
 export interface PendingRecord<T = unknown> {
 	id: string;
@@ -44,6 +54,7 @@ export function openIdb(): Promise<IDBDatabase> {
 				const store = db.createObjectStore('pending', { keyPath: 'id' });
 				store.createIndex('seq', 'seq');
 			}
+			if (!db.objectStoreNames.contains('media')) db.createObjectStore('media', { keyPath: 'id' });
 		};
 		open.onsuccess = () => {
 			const db = open.result;
@@ -92,6 +103,25 @@ export async function pendingDelete(ids: string[]): Promise<void> {
 	const tx = db.transaction('pending', 'readwrite');
 	const store = tx.objectStore('pending');
 	for (const id of ids) store.delete(id);
+	await done(tx);
+}
+
+export async function mediaAll(): Promise<PendingMedia[]> {
+	const db = await openIdb();
+	return (await req(db.transaction('media').objectStore('media').getAll())) as PendingMedia[];
+}
+
+export async function mediaPut(record: PendingMedia): Promise<void> {
+	const db = await openIdb();
+	const tx = db.transaction('media', 'readwrite');
+	tx.objectStore('media').put(record);
+	await done(tx);
+}
+
+export async function mediaDelete(id: string): Promise<void> {
+	const db = await openIdb();
+	const tx = db.transaction('media', 'readwrite');
+	tx.objectStore('media').delete(id);
 	await done(tx);
 }
 

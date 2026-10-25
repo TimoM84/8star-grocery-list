@@ -84,24 +84,48 @@ export function productViews(s: Snapshot, listId: string | null, now: number): P
 	}));
 }
 
+export interface AutocompleteOptions {
+	/** Extra names per product id (manual aliases); a match counts like a name match. */
+	aliases?: Map<string, string[]>;
+	/** Products that belong to the current list rank higher (see planning.productsForList). */
+	scope?: Set<string>;
+}
+
 /** Autocomplete: prefix matches first, then word/substring matches; favourites and frequent first. */
-export function autocomplete(views: ProductView[], query: string, limit = 6): ProductView[] {
+export function autocomplete(
+	views: ProductView[],
+	query: string,
+	limit = 6,
+	opts: AutocompleteOptions = {}
+): ProductView[] {
 	const q = searchKey(query);
 	if (!q) return [];
 	const scored: { v: ProductView; score: number }[] = [];
 	for (const v of views) {
-		const key = searchKey(v.product.name);
-		if (key === q && v.status === 'active') continue;
-		let score: number;
-		if (key.startsWith(q)) score = 300;
-		else if (key.split(/[\s-]+/).some((w) => w.startsWith(q))) score = 200;
-		else if (key.includes(q)) score = 100;
-		else continue;
-		// Prefer exact and short matches, then frequently/recently bought and favourites.
-		if (key === q) score += 50;
-		score -= Math.min(key.length - q.length, 20);
+		let best = -Infinity;
+		const names = [v.product.name, ...(opts.aliases?.get(v.product.id) ?? [])];
+		for (const [i, name] of names.entries()) {
+			const key = searchKey(name);
+			if (key === q && v.status === 'active' && i === 0) {
+				best = -Infinity;
+				break;
+			}
+			let score: number;
+			if (key.startsWith(q)) score = 300;
+			else if (key.split(/[\s-]+/).some((w) => w.startsWith(q))) score = 200;
+			else if (key.includes(q)) score = 100;
+			else continue;
+			// Prefer exact and short matches; an alias match ranks just below a name match.
+			if (key === q) score += 50;
+			score -= Math.min(key.length - q.length, 20);
+			if (i > 0) score -= 5;
+			best = Math.max(best, score);
+		}
+		if (best === -Infinity) continue;
+		let score = best;
 		score +=
 			Math.min(v.stats.purchaseCount, 50) + v.stats.recentCount * 3 + (v.product.favorite ? 15 : 0);
+		if (opts.scope?.has(v.product.id)) score += 40;
 		if (v.status === 'active') score -= 250;
 		scored.push({ v, score });
 	}

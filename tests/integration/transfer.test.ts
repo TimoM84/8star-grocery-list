@@ -125,8 +125,8 @@ describe('JSON export', () => {
 		const file = buildExport(s.db, '1.1.0', T0 + 10 * DAY);
 		expect(file).toMatchObject({
 			format: '8star-grocery-export',
-			formatVersion: 1,
-			databaseSchemaVersion: 3
+			formatVersion: 2,
+			databaseSchemaVersion: 4
 		});
 		expect(file.exportedAt).toBe(new Date(T0 + 10 * DAY).toISOString());
 		const d = file.data;

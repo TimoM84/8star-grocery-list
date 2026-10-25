@@ -11,6 +11,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		error(400, 'Invalid JSON');
 	}
 	try {
+		// Every protocol version's ops are accepted; unknown op types are rejected per op
+		// (visible to the user), never dropped silently. See docs/SYNC.md.
 		const { clientId, ops } = parseOpsRequest(body);
 		return json(getRuntime().store.applyOps(clientId, ops));
 	} catch (e) {

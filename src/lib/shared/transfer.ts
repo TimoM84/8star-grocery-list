@@ -28,4 +28,5 @@ export interface ImportReport {
 
 /** Header value required by the server before it replaces all data. */
 export const REPLACE_CONFIRMATION = 'VERVANGEN';
-export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
+/** Full backups include photos; keep below BODY_SIZE_LIMIT (100M in the image). */
+export const MAX_IMPORT_BYTES = 95 * 1024 * 1024;

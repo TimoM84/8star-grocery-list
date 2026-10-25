@@ -53,7 +53,7 @@ network or VPN; nothing is exposed publicly.
    | `BACKUP_INTERVAL_HOURS` | `24`                       | Automatic backups (0 = off)                                                  |
    | `BACKUP_KEEP`           | `14`                       | Automatic backups kept                                                       |
    | `DATA_VOLUME`           | `8star-grocery-data`       | Docker volume with the database — **never change it on an existing install** |
-   | `APP_VERSION`           | `1.1.0`                    | Image tag (`8star-grocery-list:<version>`)                                   |
+   | `APP_VERSION`           | `1.2.0`                    | Image tag (`8star-grocery-list:<version>`)                                   |
 
    ⚠️ Never set `BIND_ADDRESS` to `0.0.0.0` on a host that has a public interface, and never add
    a port forward on your router. The app has no login by design.
@@ -95,7 +95,7 @@ Beheer → App shows a warning in that case.
   your phones trust. Proxy to `http://<BIND_ADDRESS>:<HOST_PORT>` and set `ORIGIN`,
   `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host`. Disable response
   buffering for `/api/events` (Server-Sent Events; Nginx: `proxy_buffering off;`). Allow request
-  bodies up to 25 MB for imports (Nginx: `client_max_body_size 25m;`).
+  bodies up to 100 MB for full backups with photos (Nginx: `client_max_body_size 100m;`).
 
 Don't put a public tunnel (e.g. Cloudflare Tunnel) in front of it.
 
@@ -104,7 +104,20 @@ Don't put a public tunnel (e.g. Cloudflare Tunnel) in front of it.
 Open the HTTPS URL in Chrome and choose **⋮ → App installeren** (or "Toevoegen aan
 startscherm"). If Chrome offers it, Beheer → App also shows an **Installeren** button.
 
-## 7. Updating (e.g. v1.0.0 → v1.1.0)
+**Sharing text to the app (Web Share Target).** Once installed over HTTPS, “8star Boodschappen”
+appears in Android's share sheet for text (e.g. a shopping list from WhatsApp or a recipe app).
+Sharing opens the “Meerdere toevoegen” preview; nothing is added until you confirm, and shared
+links are never opened. Limits: this only works for the installed PWA in Chromium-based
+browsers on Android (not in a normal browser tab, not on iOS, not over plain HTTP), Android may
+need a minute after installation (or a reinstall after an update) before the entry shows up,
+and only text is accepted, not images or files. Without it, copy the text and use **Meerdere**
+in the app. The app has no native home-screen widget; use the PWA shortcuts instead.
+
+**Screen stays on in winkelstand.** The app asks for a Screen Wake Lock while winkelstand is open
+and visible. It needs HTTPS; battery saver can refuse it. Switch it off in Beheer → Dit
+apparaat.
+
+## 7. Updating (e.g. v1.1.0 → v1.2.0)
 
 Releases are merged into the deployed branch and tagged (see [RELEASE.md](RELEASE.md)).
 
@@ -114,40 +127,46 @@ Releases are merged into the deployed branch and tagged (see [RELEASE.md](RELEAS
 2. In Dockhand, open the stack and choose **Pull & redeploy** (or **Redeploy**). Dockhand pulls
    the branch, builds `8star-grocery-list:<APP_VERSION>` and recreates the container. The volume
    `8star-grocery-data` is kept.
-   - If you pinned `APP_VERSION` in the stack variables, set it to `1.1.0` first (the compose
-     default already is `1.1.0`).
-   - Keep `DATA_VOLUME` unchanged.
-3. On first start the app migrates the database (v1.1.0: schema 2 → 3, which adds the
-   AI-suggestion table). Beforehand it writes `/data/backups/grocery-<time>-pre-migration-v2.db`.
-   The log shows `pre-migration backup written to …` and `database ready … (schema v3)`.
-4. Wait for **healthy**. `/api/health` must report `"version":"1.1.0","schemaVersion":3`.
+   - If you pinned `APP_VERSION` in the stack variables, set it to `1.2.0` first (the compose
+     default already is `1.2.0`).
+   - Keep `DATA_VOLUME` unchanged. No new variables are needed.
+3. On first start the app migrates the database (v1.2.0: schema 3 → 4, which adds list types,
+   product memory, notes, photos, bundles, stock and shopping rounds; v1.1.0 did 2 → 3).
+   Beforehand it writes `/data/backups/grocery-<time>-pre-migration-v3.db`. The log shows
+   `pre-migration backup written to …` and `database ready … (schema v4)`. A failed migration
+   is rolled back completely and the app keeps the old database.
+4. Wait for **healthy**. `/api/health` must report `"version":"1.2.0","schemaVersion":4`.
 5. Phones show **"Nieuwe versie beschikbaar — Bijwerken"**. Tapping it reloads into the new
-   version. Changes queued offline are kept and synced.
+   version. Changes queued offline are kept and synced, also changes made with the old app
+   version (the server still accepts every older op).
+6. Optional: make a **full backup with photos** right away (Beheer → Gegevens → _Volledige
+   back-up met foto’s (ZIP)_) and keep it off the server.
 
 Automatic deploys: enable the stack's **webhook** in Dockhand (with a secret) and add it to the
 GitHub repository (Settings → Webhooks, _push_ events), but only if GitHub can reach your Dockhand
 instance. Otherwise redeploy manually after each release.
 
 **Rolling back:** the app refuses to start on a database newer than it supports. To go back to
-v1.0.0, in this order:
+v1.1.0, in this order:
 
-1. Export as JSON first if you want to keep changes made after the upgrade.
-2. Redeploy the old version (`APP_VERSION=1.0.0`, code of tag `v1.0.0`). The container keeps
-   restarting because the database is schema v3; that is expected and harmless.
-3. Restore the `pre-migration-v2` backup with `sh scripts/restore.sh <file>` (§9). It runs with the
-   v1.0.0 image and starts the app on the restored database.
+1. Make a full backup (ZIP) first if you want to keep changes made after the upgrade. Data that
+   only v1.2 knows (photos, bundles, notes, stock, aliases) cannot be used by v1.1.
+2. Redeploy the old version (`APP_VERSION=1.1.0`, code of tag `v1.1.0`). The container keeps
+   restarting because the database is schema v4; that is expected and harmless.
+3. Restore the `pre-migration-v3` backup with `sh scripts/restore.sh <file>` (§9). It runs with the
+   v1.1.0 image and starts the app on the restored database.
 
-Don't restore first and downgrade afterwards: v1.1.0 would immediately migrate the restored file
-again.
+Don't restore first and downgrade afterwards: v1.2.0 would immediately migrate the restored file
+again. Photo files in `/data/media` are left alone by a rollback; v1.1 ignores them.
 
 ## 8. Building the image without internet on the Docker host (optional)
 
 ```sh
 # on a machine with internet, same CPU architecture as the server
-docker build --build-arg APP_VERSION=1.1.0 -t 8star-grocery-list:1.1.0 .
-docker save 8star-grocery-list:1.1.0 | gzip > 8star-grocery-list-1.1.0.tar.gz
+docker build --build-arg APP_VERSION=1.2.0 -t 8star-grocery-list:1.2.0 .
+docker save 8star-grocery-list:1.2.0 | gzip > 8star-grocery-list-1.2.0.tar.gz
 # on the server
-gunzip -c 8star-grocery-list-1.1.0.tar.gz | docker load
+gunzip -c 8star-grocery-list-1.2.0.tar.gz | docker load
 ```
 
 Then deploy with `docker compose up -d --no-build`, or remove `build:`/`pull_policy:` from a copy
@@ -165,10 +184,17 @@ passes `PRAGMA integrity_check`.
 **Manual backup:** Beheer → Gegevens → _Back-up op server maken_, or
 `docker compose -p 8star-grocery exec app node scripts/backup.mjs`.
 
+**Photos** are stored next to the database in the same volume, under `/data/media` (one file
+per photo, named by its id). The `.db` backups contain the photo _references_, not the image
+files; the files are never deleted while a product uses them, and unused ones are removed only
+after 30 days. To back up everything in one file, use the **full backup ZIP** (Beheer →
+Gegevens → _Volledige back-up met foto’s (ZIP)_, or `GET /api/export?format=backup`).
+
 **Copy backups off the host** (recommended, e.g. nightly):
 
 ```sh
-docker run --rm -v 8star-grocery-data:/data -v "$PWD":/out alpine sh -c 'cp /data/backups/*.db /out/'
+docker run --rm -v 8star-grocery-data:/data -v "$PWD":/out alpine sh -c 'cp /data/backups/*.db /out/ && cp -r /data/media /out/'
+curl -fsS -o 8star-backup.zip http://<BIND_ADDRESS>:<HOST_PORT>/api/export?format=backup   # data + photos
 ```
 
 **Restore a backup** on the Docker host, from any directory that contains `scripts/restore.sh`
@@ -191,9 +217,13 @@ If anything fails, the app is restarted with the unchanged database. Connected p
 the restored data automatically, and changes they had not sent yet are sent afterwards.
 Overrides: `COMPOSE_PROJECT`, `SERVICE`, `DATA_VOLUME`, `IMAGE`.
 
-**Restore from a JSON export** (e.g. on a new server): Beheer → Gegevens → Importeren →
-_Volledige export (JSON)_ → _Alles vervangen_. A `pre-import` backup is written first. See
-[IMPORT-EXPORT.md](IMPORT-EXPORT.md).
+`restore.sh` restores the database; photo files in `/data/media` stay where they are, so
+references keep working.
+
+**Restore from a full backup ZIP or JSON export** (e.g. on a new server): Beheer → Gegevens →
+Importeren → _Volledige export of back-up_ → choose the `.zip` (with photos) or `.json` →
+_Alles vervangen_. A `pre-import` backup is written first; photos from the ZIP are validated and
+written back to `/data/media`. See [IMPORT-EXPORT.md](IMPORT-EXPORT.md).
 
 ## 10. Troubleshooting
 
@@ -202,7 +232,9 @@ _Volledige export (JSON)_ → _Alles vervangen_. A `pre-import` backup is writte
 | Container restarts with `Invalid ORIGIN`         | `ORIGIN` must be empty or a full URL (`https://…`)                                                                |
 | Unreachable from phone                           | `BIND_ADDRESS` must be the host's LAN/VPN IP, and the firewall must allow `HOST_PORT` from LAN/VPN                |
 | Badge stays "Offline" behind a proxy             | SSE is buffered by the proxy: disable buffering for `/api/events`                                                 |
-| Import fails with "te groot" behind a proxy      | Raise the proxy's request body limit to 25 MB                                                                     |
+| Import fails with "te groot" behind a proxy      | Raise the proxy's request body limit to 100 MB                                                                    |
+| Photos don't appear on other phones              | Beheer → Synchronisatie shows waiting or refused photos; photos upload when the server is reachable               |
+| Screen still turns off in winkelstand            | Wake Lock needs HTTPS and is refused in battery saver; check Beheer → Dit apparaat                                |
 | Color does not change                            | Recreate the container (not just restart), then reload the app online                                             |
 | No install option and no offline start           | You're on plain HTTP (§5)                                                                                         |
 | `database schema vN is newer than this app`      | You started an older image on a newer database; deploy the newer version or restore a matching backup             |

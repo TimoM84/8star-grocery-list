@@ -1,8 +1,13 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
-	import { app } from '$lib/client/app.svelte';
+	import { app, type AddOutcome } from '$lib/client/app.svelte';
 	import { autocomplete, type ProductView } from '$lib/shared/selectors';
 	import { formatQuantity, parseEntry } from '$lib/shared/quantity';
+
+	let {
+		onadded,
+		autofocus = false
+	}: { onadded?: (outcome: AddOutcome) => void; autofocus?: boolean } = $props();
 
 	let text = $state('');
 	let focused = $state(false);
@@ -10,9 +15,32 @@
 	let input: HTMLInputElement | undefined = $state();
 
 	const parsed = $derived(parseEntry(text));
+	const aliases = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this derivation
+		const map = new Map<string, string[]>();
+		for (const a of app.view?.aliases ?? [])
+			map.set(a.productId, [...(map.get(a.productId) ?? []), a.alias]);
+		return map;
+	});
 	const matches = $derived(
-		focused && text.trim() ? autocomplete(app.products, parsed.name, 6) : []
+		focused && text.trim()
+			? autocomplete(app.products, parsed.name, 6, { aliases, scope: app.listScope })
+			: []
 	);
+	/** Other lists where a product is active (shown so you can choose "ook hier" or move). */
+	function elsewhere(v: ProductView): string | null {
+		const names = (app.view?.items ?? [])
+			.filter(
+				(i) => i.productId === v.product.id && i.listId !== app.listId && i.status === 'active'
+			)
+			.map((i) => app.list(i.listId)?.name)
+			.filter(Boolean);
+		return names.length ? `op ${names.join(', ')}` : null;
+	}
+
+	$effect(() => {
+		if (autofocus) input?.focus();
+	});
 
 	$effect(() => {
 		void matches;
@@ -33,14 +61,16 @@
 		}
 		const outcome = app.add(text);
 		if (outcome.kind !== 'empty') text = '';
-		input?.focus();
+		onadded?.(outcome);
+		if (outcome.kind !== 'prompt') input?.focus();
 	}
 
 	function pick(v: ProductView) {
-		// Same path as typing the full name: duplicates are highlighted, completed items reactivated.
-		app.add(withQuantity(v.product.name));
+		// Same path as typing the full name: duplicates open the choice, ticked items return.
+		const outcome = app.add(withQuantity(v.product.name));
 		text = '';
-		input?.focus();
+		onadded?.(outcome);
+		if (outcome.kind !== 'prompt') input?.focus();
 	}
 
 	function onkeydown(e: KeyboardEvent) {
@@ -58,7 +88,9 @@
 
 	function statusLabel(v: ProductView): string {
 		if (v.status === 'active') return 'op de lijst';
-		if (v.status === 'completed') return 'afgevinkt · terugzetten';
+		const other = elsewhere(v);
+		if (v.status === 'completed') return other ? `afgevinkt · ${other}` : 'afgevinkt · terugzetten';
+		if (other) return other;
 		if (v.stats.purchaseCount > 0) return `${v.stats.purchaseCount}× gekocht`;
 		return '';
 	}

@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The test builds the original v1.0.0 image from history to verify the upgrade.
+          # The test builds the previous release image (v1.1.0) from history to verify the upgrade.
           fetch-depth: 0
 
       - name: Docker end-to-end test

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { openDatabase } from '$lib/server/db';
+import { latestSchemaVersion, openDatabase } from '$lib/server/db';
 import { createBackup, createBackupSync, listBackups, pruneBackups } from '$lib/server/backup';
 
 describe('backups', () => {
@@ -19,7 +19,7 @@ describe('backups', () => {
 			expect(fs.existsSync(f + '-wal')).toBe(false);
 			const copy = new Database(f, { readonly: true });
 			expect(copy.pragma('integrity_check', { simple: true })).toBe('ok');
-			expect(copy.pragma('user_version', { simple: true })).toBe(3);
+			expect(copy.pragma('user_version', { simple: true })).toBe(latestSchemaVersion());
 			copy.close();
 		}
 		expect(listBackups(dir)).toHaveLength(4);
