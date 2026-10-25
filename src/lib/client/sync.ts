@@ -11,9 +11,9 @@
 
 import type { Snapshot } from '$lib/shared/types';
 import type { Op, OpPayload, OpResult, OpsResponse } from '$lib/shared/ops';
-import { UNDOABLE_TYPES } from '$lib/shared/ops';
+import { PROTOCOL_VERSION, UNDOABLE_TYPES } from '$lib/shared/ops';
 import { applyOps, restoreHintFor, type LocalOp, type RestoreHint } from '$lib/shared/reducer';
-import type { PendingRecord } from './idb';
+import type { PendingMedia, PendingRecord } from './idb';
 import { uuid } from './id';
 
 export type Connection = 'connecting' | 'online' | 'offline';
@@ -29,7 +29,12 @@ export interface SyncIssue {
 export interface SyncStatus {
 	connection: Connection;
 	syncing: boolean;
+	/** Changes not yet shared with the server. */
 	pending: number;
+	/** Photos waiting for upload. */
+	pendingMedia: number;
+	/** The server speaks a newer protocol: this app version should be updated. */
+	serverNewer: boolean;
 	lastSyncAt: number | null;
 	/** True once data (cached or fresh) is available. */
 	ready: boolean;
@@ -41,6 +46,9 @@ export interface Storage {
 	pendingAll<T>(): Promise<PendingRecord<T>[]>;
 	pendingPut(records: PendingRecord[]): Promise<void>;
 	pendingDelete(ids: string[]): Promise<void>;
+	mediaAll?(): Promise<PendingMedia[]>;
+	mediaPut?(record: PendingMedia): Promise<void>;
+	mediaDelete?(id: string): Promise<void>;
 }
 
 export interface EngineDeps {
@@ -68,9 +76,13 @@ export class SyncEngine {
 		connection: 'connecting',
 		syncing: false,
 		pending: 0,
+		pendingMedia: 0,
+		serverNewer: false,
 		lastSyncAt: null,
 		ready: false
 	};
+	/** Photos waiting for upload (kept in IndexedDB until the server has them). */
+	media: PendingMedia[] = [];
 	clientId = '';
 	/** serverTime - localTime, measured on every snapshot. */
 	clockOffset = 0;
@@ -125,6 +137,7 @@ export class SyncEngine {
 			this.issues = (await storage.kvGet<SyncIssue[]>('issues')) ?? [];
 			this.queue = await storage.pendingAll<LocalOp>();
 			this.localSeq = this.queue.reduce((m, r) => Math.max(m, r.seq), 0);
+			this.media = (await storage.mediaAll?.()) ?? [];
 		} catch (e) {
 			console.warn('[sync] local storage unavailable, continuing in memory', e);
 			if (!this.clientId) this.clientId = uuid();
@@ -169,6 +182,7 @@ export class SyncEngine {
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						clientId: this.clientId,
+						protocol: PROTOCOL_VERSION,
 						ops: ops.slice(0, 50).map((r) => stripLocal(r.op))
 					}),
 					keepalive: true
@@ -207,6 +221,70 @@ export class SyncEngine {
 			.catch((e) => console.warn('[sync] persist failed', e));
 		this.scheduleFlush();
 		return op;
+	}
+
+	/**
+	 * Keeps a photo durably on this device until it is uploaded. Call before enqueueing the op
+	 * that references it: flushes always upload waiting photos first.
+	 */
+	async queueMedia(id: string, blob: Blob): Promise<void> {
+		const record: PendingMedia = { id, blob, createdAt: this.deps.now(), error: null };
+		this.media = [...this.media.filter((m) => m.id !== id), record];
+		try {
+			await this.deps.storage.mediaPut?.(record);
+		} catch (e) {
+			console.warn('[sync] photo could not be stored locally', e);
+		}
+		this.recompute();
+	}
+
+	/** Local copy of a photo that is not on the server yet. */
+	pendingPhoto(id: string): PendingMedia | undefined {
+		return this.media.find((m) => m.id === id);
+	}
+
+	/** Uploads waiting photos. Returns false when the network failed (stop flushing). */
+	private async uploadMedia(): Promise<boolean> {
+		for (const m of this.media.filter((x) => !x.error)) {
+			let res: Response;
+			try {
+				res = await this.request(`/api/media/${encodeURIComponent(m.id)}`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/octet-stream' },
+					body: m.blob
+				});
+			} catch (e) {
+				this.onNetworkError(e);
+				return false;
+			}
+			if (res.status >= 500 || res.status === 408 || res.status === 429) {
+				this.onNetworkError(new Error('HTTP ' + res.status));
+				return false;
+			}
+			if (res.ok) {
+				this.media = this.media.filter((x) => x !== m);
+				void this.deps.storage.mediaDelete?.(m.id);
+			} else {
+				const body = (await res.json().catch(() => ({}))) as { message?: string };
+				const message = body.message ?? `Foto geweigerd (HTTP ${res.status}).`;
+				m.error = message;
+				void this.deps.storage.mediaPut?.(m);
+				this.issues = [
+					{ id: m.id, at: this.deps.now(), opType: 'photo', kind: 'rejected' as const, message },
+					...this.issues
+				].slice(0, 50);
+				void this.deps.storage.kvSet('issues', this.issues);
+			}
+			this.recompute();
+		}
+		return true;
+	}
+
+	/** Forget a photo the server refused. */
+	discardMedia(id: string) {
+		this.media = this.media.filter((m) => m.id !== id);
+		void this.deps.storage.mediaDelete?.(id);
+		this.recompute();
 	}
 
 	/** Undo a previously enqueued op. Cancels it locally when it never left the device. */
@@ -306,6 +384,7 @@ export class SyncEngine {
 			void this.deps.storage.kvSet('aliases', []);
 		}
 		this.server = snap;
+		this.status.serverNewer = (snap.protocol ?? 1) > PROTOCOL_VERSION;
 		const dropped = this.queue.filter(
 			(r) => r.ackSeq !== null && (rolledBack || r.ackSeq <= snap.seq)
 		);
@@ -330,7 +409,13 @@ export class SyncEngine {
 		this.flushing = (async () => {
 			while (!this.stopped) {
 				const batch = this.queue.filter((r) => r.ackSeq === null).slice(0, BATCH);
-				if (!batch.length) break;
+				if (!batch.length && !this.media.some((m) => !m.error)) break;
+				if (this.media.some((m) => !m.error)) {
+					this.status.syncing = true;
+					this.emit();
+					if (!(await this.uploadMedia())) break;
+					if (!batch.length) break;
+				}
 				this.status.syncing = true;
 				this.emit();
 				for (const r of batch) this.inflight.add(r.id);
@@ -341,6 +426,7 @@ export class SyncEngine {
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
 							clientId: this.clientId,
+							protocol: PROTOCOL_VERSION,
 							// `restore` is a local-only hint; strip it from the wire format.
 							ops: batch.map((r) => stripLocal(r.op))
 						})
@@ -506,6 +592,7 @@ export class SyncEngine {
 			);
 		}
 		this.status.pending = this.queue.filter((r) => r.ackSeq === null).length;
+		this.status.pendingMedia = this.media.filter((m) => !m.error).length;
 		this.status.ready = this.view !== null;
 		this.emit();
 	}

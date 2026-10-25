@@ -65,6 +65,8 @@ class AppState {
 		connection: 'connecting',
 		syncing: false,
 		pending: 0,
+		pendingMedia: 0,
+		serverNewer: false,
 		lastSyncAt: null,
 		ready: false
 	});
