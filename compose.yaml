@@ -8,8 +8,8 @@ services:
       context: .
       args:
         BUILD_ID: ${BUILD_ID:-}
-        APP_VERSION: ${APP_VERSION:-1.1.0}
-    image: 8star-grocery-list:${APP_VERSION:-1.1.0}
+        APP_VERSION: ${APP_VERSION:-1.2.0}
+    image: 8star-grocery-list:${APP_VERSION:-1.2.0}
     pull_policy: build
     restart: unless-stopped
     init: true

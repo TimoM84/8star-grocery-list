@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# End-to-end Docker test, run by CI (and locally): upgrade from the v1.0.0 image with real data,
-# healthcheck, non-root user, runtime theme change without rebuild, imports, persistence across
-# container recreation, backup and restore.
+# End-to-end Docker test, run by CI (and locally): upgrade from the previous release image
+# (v1.1.0 by default) with real data, healthcheck, non-root user, runtime theme change without
+# rebuild, imports, product photos on the /data volume, full backup ZIP round trip, persistence
+# across container recreation, backup and restore.
 #
 #   bash scripts/ci/docker-test.sh
 #
-# Needs: docker with compose v2, git history containing the v1.0.0 commit, curl, python3.
+# Needs: docker with compose v2, git history containing BASE_REF (default tag v1.1.0), curl,
+# python3.
 # Uses its own volume (8star-ci-data) and port 3999; never touches 8star-grocery-data.
 # BUILD="docker build ..." can override the image build command (e.g. behind a TLS proxy).
 set -euo pipefail
 
-V100_COMMIT="${V100_COMMIT:-0d218fa5b34d100e82816b1dfbd6f7248bb5a11e}"
+BASE_REF="${BASE_REF:-v1.1.0}"
+BASE_VERSION="${BASE_VERSION:-1.1.0}"
 export HOST_PORT="${HOST_PORT:-3999}" BIND_ADDRESS=127.0.0.1 DATA_VOLUME=8star-ci-data
 export COMPOSE_PROJECT_NAME=8star-grocery
 B="http://127.0.0.1:${HOST_PORT}"
@@ -24,7 +27,7 @@ step() { printf '\n=== %s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; docker compose logs app | tail -50 >&2 || true; exit 1; }
 cleanup() {
 	docker compose down -v >/dev/null 2>&1 || true
-	git worktree remove --force "$WORK/v100" >/dev/null 2>&1 || true
+	git worktree remove --force "$WORK/base" >/dev/null 2>&1 || true
 	rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -43,14 +46,14 @@ json() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
 docker compose down -v >/dev/null 2>&1 || true
 
-step "Build the original v1.0.0 image ($V100_COMMIT)"
-git worktree add --detach "$WORK/v100" "$V100_COMMIT" >/dev/null
-(cd "$WORK/v100" && $BUILD -t 8star-grocery-list:1.0.0 .)
+step "Build the previous release image ($BASE_REF)"
+git worktree add --detach "$WORK/base" "$BASE_REF" >/dev/null
+(cd "$WORK/base" && $BUILD --build-arg APP_VERSION="$BASE_VERSION" -t "8star-grocery-list:$BASE_VERSION" .)
 
-step "Run v1.0.0 and create household data"
-APP_VERSION=1.0.0 docker compose up -d --no-build
+step "Run v$BASE_VERSION and create household data"
+APP_VERSION="$BASE_VERSION" docker compose up -d --no-build
 wait_healthy
-curl -fsS "$B/api/health" | json "d['version']" | grep -qx 1.0.0 || fail "v1.0.0 did not start"
+curl -fsS "$B/api/health" | json "d['version']" | grep -qx "$BASE_VERSION" || fail "v$BASE_VERSION did not start"
 NOW=$(($(date +%s) * 1000))
 DAY=86400000
 OPS="{\"id\":\"ci-add\",\"at\":$((NOW - 30 * DAY)),\"type\":\"item.add\",\"itemId\":\"ci-melk\",\"productId\":\"ci-p-melk\",\"listId\":\"default\",\"name\":\"Halfvolle melk\",\"quantity\":2,\"unit\":\"l\",\"categoryId\":\"cat-zuivel\"}"
@@ -71,17 +74,22 @@ wait_healthy
 HEALTH="$(curl -fsS "$B/api/health")"
 echo "$HEALTH"
 [ "$(echo "$HEALTH" | json "d['version']")" = "$VERSION" ] || fail "wrong version after upgrade"
-[ "$(echo "$HEALTH" | json "d['schemaVersion']")" = "3" ] || fail "migration did not run"
+[ "$(echo "$HEALTH" | json "d['schemaVersion']")" = "4" ] || fail "migration did not run"
 curl -fsS "$B/api/snapshot" >"$WORK/after.json"
 python3 - "$WORK/before.json" "$WORK/after.json" <<'PY' || fail "data changed during upgrade"
 import json, sys
 a, b = (json.load(open(f)) for f in sys.argv[1:3])
+# Everything the old version had is unchanged; new fields get safe defaults.
 for key in ("lists", "categories", "products", "items"):
-    assert a[key] == b[key], key
+    assert len(a[key]) == len(b[key]), key
+    for old, new in zip(a[key], b[key]):
+        assert {k: new.get(k) for k in old} == old, (key, old, new)
 assert {p["name"]: p["purchaseCount"] for p in b["products"]} == {"Halfvolle melk": 4, "Shampoo": 0}
+assert all(l["kind"] == "grocery" for l in b["lists"])
+assert all(p["stockStatus"] == "unknown" and p["photoId"] is None for p in b["products"])
 print("upgrade preserved", len(b["products"]), "products,", len(b["items"]), "items")
 PY
-docker compose exec -T app sh -c 'ls /data/backups' | grep -q 'pre-migration-v2' || fail "no pre-migration backup"
+docker compose exec -T app sh -c 'ls /data/backups' | grep -q 'pre-migration-v3' || fail "no pre-migration backup"
 
 step "Container hardening and endpoints"
 [ "$(docker compose exec -T app id -u | tr -d '\r')" = 1000 ] || fail "not running as uid 1000"
@@ -107,6 +115,42 @@ curl -fsS "$B/" | grep -q -- '--accent:#1d7f46' || fail "invalid color must fall
 docker compose up -d --no-build
 wait_healthy
 
+step "Product photo on the /data volume"
+python3 - "$WORK/photo.png" <<'PY'
+import struct, sys, zlib
+w = h = 24
+raw = b"".join(b"\x00" + bytes([30, 150, 80]) * w for _ in range(h))
+def chunk(t, d):
+    return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+open(sys.argv[1], "wb").write(png)
+PY
+printf '<svg xmlns="http://www.w3.org/2000/svg"/>' >"$WORK/evil.svg"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$B/api/media/ci-evil" -H 'content-type: application/octet-stream' --data-binary @"$WORK/evil.svg")" = 415 ] ||
+	fail "SVG upload must be refused"
+curl -fsS -X PUT "$B/api/media/ci-photo" -H 'content-type: application/octet-stream' --data-binary @"$WORK/photo.png" >/dev/null || fail "photo upload"
+curl -fsS -X POST "$B/api/ops" -H 'content-type: application/json' \
+	-d "{\"clientId\":\"ci\",\"protocol\":2,\"ops\":[{\"id\":\"ci-photo-op\",\"at\":$NOW,\"type\":\"product.setPhoto\",\"productId\":\"ci-p-melk\",\"mediaId\":\"ci-photo\"}]}" >/dev/null
+docker compose exec -T app sh -c 'ls /data/media' | grep -q 'ci-photo.png' || fail "photo not stored under /data/media"
+curl -fsS -D "$WORK/media.h" -o /dev/null "$B/api/media/ci-photo" || fail "photo not served"
+grep -qi 'content-type: image/png' "$WORK/media.h" || fail "photo content type"
+
+step "Full backup ZIP (data + photos) round trip"
+curl -fsS "$B/api/export?format=backup" -o "$WORK/backup.zip"
+python3 - "$WORK/backup.zip" <<'PY' || fail "backup ZIP incomplete"
+import json, sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+names = set(z.namelist())
+assert {"manifest.json", "export.json", "media/ci-photo.png"} <= names, names
+m = json.loads(z.read("manifest.json"))
+assert m["format"] == "8star-grocery-backup", m
+print("backup contains", sorted(names))
+PY
+docker compose exec -T app sh -c 'rm -f /data/media/ci-photo.png'
+curl -fsS -X POST "$B/api/import?kind=json&mode=replace" -H 'content-type: application/octet-stream' \
+	-H 'x-confirm-replace: VERVANGEN' --data-binary @"$WORK/backup.zip" | json "d['ok']" | grep -qx True || fail "backup ZIP restore"
+curl -fsS -o /dev/null "$B/api/media/ci-photo" || fail "photo not restored from the backup ZIP"
+
 step "Import: JSON export round trip (replace) and safety checks"
 curl -fsS "$B/api/export?format=json" >"$WORK/export.json"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/import?kind=json&mode=replace" -H 'content-type: application/octet-stream' --data-binary @"$WORK/export.json")" = 428 ] ||
@@ -127,6 +171,7 @@ docker compose down
 docker compose up -d --no-build
 wait_healthy
 curl -fsS "$B/api/snapshot" | grep -q '"name":"Halfvolle melk"' || fail "data lost after recreation"
+curl -fsS -o /dev/null "$B/api/media/ci-photo" || fail "photo lost after recreation"
 
 step "Backup and restore with the v$VERSION image"
 docker compose exec -T app node scripts/backup.mjs

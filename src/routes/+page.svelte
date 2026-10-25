@@ -69,7 +69,18 @@
 		const key = shopping && session ? `${session.listId}:${session.enteredAt}` : null;
 		if (key !== frozenFor) {
 			frozenFor = key;
-			frozen = key ? sorted.map((v) => v.item.id) : null;
+			// After a reload, items ticked earlier in this session keep their place too.
+			const from = since ?? session?.enteredAt ?? 0;
+			frozen = key
+				? sortActive(
+						views.filter(
+							(v) =>
+								(v.item.status === 'active' && v.item.unavailableAt === null) ||
+								(v.item.status === 'completed' && (v.item.completedAt ?? 0) >= from)
+						),
+						app.sort
+					).map((v) => v.item.id)
+				: null;
 			showTools = false;
 			showAdd = false;
 			shoppingCompletedOpen = false;
@@ -255,8 +266,8 @@
 		class="pt-safe sticky top-0 z-20 border-b border-line/60 bg-bg/95 pb-2 backdrop-blur"
 		data-testid="shopping-bar"
 	>
-		<div class="px-safe mx-auto flex max-w-2xl items-center gap-2 pt-1">
-			<div class="min-w-0 flex-1">
+		<div class="px-safe mx-auto flex max-w-2xl flex-wrap items-center gap-x-2 pt-1">
+			<div class="min-w-0 flex-1 basis-36">
 				<h1
 					class="text-[min(1.25rem,5.4vw)] leading-tight font-bold [overflow-wrap:anywhere]"
 					data-testid="page-title"
@@ -274,23 +285,25 @@
 							: `Nog ${remaining} producten`}
 				</p>
 			</div>
-			<SyncBadge />
-			<button
-				type="button"
-				class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent active:bg-accent-strong"
-				aria-label="Toevoegen"
-				aria-expanded={showAdd}
-				onclick={() => (showAdd = !showAdd)}
-				data-testid="shopping-add"
-			>
-				<Icon name={showAdd ? 'x' : 'plus'} size={26} stroke={2.5} />
-			</button>
-			<button
-				type="button"
-				class="min-h-12 shrink-0 rounded-2xl bg-ink px-4 text-base font-semibold text-bg"
-				onclick={() => app.exitShopping()}
-				data-testid="shopping-exit">Klaar</button
-			>
+			<div class="ml-auto flex items-center gap-2">
+				<SyncBadge />
+				<button
+					type="button"
+					class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent active:bg-accent-strong"
+					aria-label="Toevoegen"
+					aria-expanded={showAdd}
+					onclick={() => (showAdd = !showAdd)}
+					data-testid="shopping-add"
+				>
+					<Icon name={showAdd ? 'x' : 'plus'} size={26} stroke={2.5} />
+				</button>
+				<button
+					type="button"
+					class="min-h-12 shrink-0 rounded-2xl bg-ink px-4 text-base font-semibold text-bg"
+					onclick={() => app.exitShopping()}
+					data-testid="shopping-exit">Klaar</button
+				>
+			</div>
 		</div>
 		<div class="px-safe mx-auto max-w-2xl">
 			{#if presentOthers.length || roundUnshared}
@@ -486,7 +499,7 @@
 	{/if}
 
 	<section aria-labelledby="active-title">
-		<div class="mb-2 flex items-center gap-2">
+		<div class="mb-2 flex flex-wrap items-center gap-2">
 			<h2 id="active-title" class="flex-1 text-base font-semibold text-muted">
 				{activeTitle} <span class="text-faint">· {available.length}</span>
 			</h2>

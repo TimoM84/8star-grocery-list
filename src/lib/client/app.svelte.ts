@@ -493,7 +493,8 @@ class AppState {
 			return {
 				...e,
 				note: cleanNote(e.note),
-				itemId: plan?.item?.id ?? uuid(),
+				// Always a fresh id: an existing item is matched by product, never by id.
+				itemId: uuid(),
 				productId: plan?.product?.id ?? uuid(),
 				categoryId: plan?.product ? null : (e.categoryId ?? guessCategory(e.name))
 			};

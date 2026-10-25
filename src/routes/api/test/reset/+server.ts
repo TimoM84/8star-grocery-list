@@ -11,7 +11,11 @@ export const POST = () => {
 	const { db, store } = getRuntime();
 	db.transaction(() => {
 		db.exec(`
+			DELETE FROM claims; DELETE FROM round_participants; DELETE FROM rounds;
+			DELETE FROM snoozes; DELETE FROM bundle_lines; DELETE FROM bundles;
+			DELETE FROM product_aliases; DELETE FROM ai_recommendations;
 			DELETE FROM items; DELETE FROM cycles; DELETE FROM products; DELETE FROM id_aliases;
+			DELETE FROM media;
 			DELETE FROM ops; DELETE FROM lists; DELETE FROM categories;
 		`);
 		db.exec(migrations.find((m) => m.version === 2)!.sql);
