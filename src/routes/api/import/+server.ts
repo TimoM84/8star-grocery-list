@@ -8,7 +8,8 @@ const KINDS: ImportKind[] = ['json', 'products-csv', 'purchases-csv', 'ai'];
 
 /**
  * POST /api/import?kind=json|products-csv|purchases-csv|ai&mode=merge|replace[&preview=1]
- * Body: the raw file content. A replace needs header `X-Confirm-Replace: VERVANGEN`.
+ * Body: the raw file content (JSON, or a full backup ZIP for kind=json). A replace needs header
+ * `X-Confirm-Replace: VERVANGEN`.
  */
 export const POST: RequestHandler = async ({ url, request }) => {
 	const kind = url.searchParams.get('kind') as ImportKind;
@@ -24,9 +25,18 @@ export const POST: RequestHandler = async ({ url, request }) => {
 	)
 		error(428, 'Replacing all data requires explicit confirmation');
 
-	const text = await request.text();
+	const bytes = Buffer.from(await request.arrayBuffer());
+	const text = bytes.toString('utf8');
 	if (!text.trim()) error(400, 'Empty file');
-	const { store, config } = getRuntime();
-	const report = runImport(store, { kind, mode, text, preview, backupDir: config.backupDir });
+	const { store, config, media } = getRuntime();
+	const report = runImport(store, {
+		kind,
+		mode,
+		text,
+		bytes,
+		preview,
+		backupDir: config.backupDir,
+		media
+	});
 	return json(report, { status: report.ok ? 200 : 422 });
 };

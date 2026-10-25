@@ -32,3 +32,4 @@ export function capitaliseFirst(input: string): string {
 }
 
 export const MAX_NAME_LENGTH = 80;
+export const MAX_NOTE_LENGTH = 200;

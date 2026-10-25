@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { migrations } from './migrations';
+import { migrations, type Migration } from './migrations';
 
 export type DB = Database.Database;
 
@@ -14,10 +14,10 @@ export function latestSchemaVersion(): number {
 }
 
 /** Applies pending migrations, each in its own transaction. Returns the versions applied. */
-export function migrate(db: DB): number[] {
+export function migrate(db: DB, list: Migration[] = migrations): number[] {
 	const applied: number[] = [];
 	const current = schemaVersion(db);
-	for (const m of migrations) {
+	for (const m of list) {
 		if (m.version <= current) continue;
 		db.transaction(() => {
 			db.exec(m.sql);

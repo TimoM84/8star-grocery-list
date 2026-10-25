@@ -1,27 +1,38 @@
 /**
  * Versioned export/import formats. See docs/IMPORT-EXPORT.md.
  *
- * Export format 1 contains every meaningful record with its stable id, relationships and
- * ISO 8601 timestamps. Derived statistics are included for analysis but ignored on import.
+ * Export format 2 (v1.2) contains every meaningful record with its stable id, relationships
+ * and ISO 8601 timestamps: lists (with kind and walking route), categories, products (with
+ * memory, note, photo reference and stock status), aliases, list items (with notes and
+ * statuses), purchase events, bundles, AI recommendations and photo metadata. Derived
+ * statistics are included for analysis but ignored on import. Format 1 files (v1.1) and the
+ * v1.0 export are still accepted; missing fields get safe defaults.
+ *
+ * Deliberately not exported (temporary): shopping rounds, participants, claims, device names
+ * and "Niet nu" snoozes.
  */
 
 import type { DB } from '../db';
 import { schemaVersion } from '../db';
 import { computeStats } from '$lib/shared/stats';
 import { UNITS } from '$lib/shared/quantity';
-import { cleanName, nameKey, MAX_NAME_LENGTH } from '$lib/shared/text';
+import { cleanName, nameKey, MAX_NAME_LENGTH, MAX_NOTE_LENGTH } from '$lib/shared/text';
 
 export const EXPORT_FORMAT = '8star-grocery-export';
-export const EXPORT_FORMAT_VERSION = 1;
+export const EXPORT_FORMAT_VERSION = 2;
 
-export interface ExportList {
+export interface ExportCategory {
 	id: string;
 	name: string;
 	position: number;
 	createdAt: string;
 	updatedAt: string;
 }
-export type ExportCategory = ExportList;
+export interface ExportList extends ExportCategory {
+	kind: 'grocery' | 'checklist';
+	kindChangedAt: string | null;
+	categoryOrder: string[] | null;
+}
 
 export interface ExportProduct {
 	id: string;
@@ -30,6 +41,47 @@ export interface ExportProduct {
 	favorite: boolean;
 	createdAt: string;
 	updatedAt: string;
+	defaultQuantity: number | null;
+	defaultUnit: string | null;
+	preferredListId: string | null;
+	note: string | null;
+	photoId: string | null;
+	stockStatus: 'unknown' | 'enough' | 'low' | 'out';
+	stockUpdatedAt: string | null;
+}
+
+export interface ExportAlias {
+	id: string;
+	productId: string;
+	alias: string;
+	createdAt: string;
+}
+
+export interface ExportBundle {
+	id: string;
+	name: string;
+	servings: number | null;
+	createdAt: string;
+	updatedAt: string;
+	lines: {
+		id: string;
+		productId: string;
+		quantity: number | null;
+		unit: string | null;
+		note: string | null;
+	}[];
+}
+
+/** Photo metadata. The bytes are only in the full backup ZIP (`media/<file>`). */
+export interface ExportMedia {
+	id: string;
+	mime: string;
+	width: number;
+	height: number;
+	bytes: number;
+	sha256: string;
+	createdAt: string;
+	file: string;
 }
 
 export type PurchaseEventStatus = 'purchased' | 'cancelled' | 'open';
@@ -45,6 +97,10 @@ export interface ExportPurchaseEvent {
 	cancelledAt: string | null;
 	quantity: number | null;
 	unit: string | null;
+	/** What was asked for (format 2). */
+	requestedQuantity: number | null;
+	/** What was actually bought, including partial purchases (format 2). */
+	purchasedQuantity: number | null;
 }
 
 export interface ExportListItem {
@@ -59,6 +115,11 @@ export interface ExportListItem {
 	purchaseEventId: string | null;
 	createdAt: string;
 	updatedAt: string;
+	note: string | null;
+	substituteOk: boolean;
+	substituteNote: string | null;
+	unavailableAt: string | null;
+	position: number;
 }
 
 export interface ExportAiRecommendation {
@@ -83,6 +144,9 @@ export interface ExportData {
 	listItems: ExportListItem[];
 	purchaseEvents: ExportPurchaseEvent[];
 	aiRecommendations: ExportAiRecommendation[];
+	productAliases: ExportAlias[];
+	bundles: ExportBundle[];
+	media: ExportMedia[];
 }
 
 export interface ExportFile {
@@ -113,7 +177,12 @@ export function exportData(db: DB): ExportData {
 				name: r.name as string,
 				position: r.position as number,
 				createdAt: isoReq(r.created_at as number),
-				updatedAt: isoReq(r.updated_at as number)
+				updatedAt: isoReq(r.updated_at as number),
+				kind: (r.kind as 'grocery' | 'checklist') ?? 'grocery',
+				kindChangedAt: iso(r.kind_changed_at as number | null),
+				categoryOrder: r.category_order
+					? (JSON.parse(r.category_order as string) as string[])
+					: null
 			})),
 			categories: all('SELECT * FROM categories ORDER BY position, created_at').map((r) => ({
 				id: r.id as string,
@@ -128,7 +197,14 @@ export function exportData(db: DB): ExportData {
 				categoryId: (r.category_id as string | null) ?? null,
 				favorite: r.favorite === 1,
 				createdAt: isoReq(r.created_at as number),
-				updatedAt: isoReq(r.updated_at as number)
+				updatedAt: isoReq(r.updated_at as number),
+				defaultQuantity: (r.default_quantity as number | null) ?? null,
+				defaultUnit: (r.default_unit as string | null) ?? null,
+				preferredListId: (r.preferred_list_id as string | null) ?? null,
+				note: (r.note as string | null) ?? null,
+				photoId: (r.photo_id as string | null) ?? null,
+				stockStatus: (r.stock_status as ExportProduct['stockStatus']) ?? 'unknown',
+				stockUpdatedAt: iso(r.stock_updated_at as number | null)
 			})),
 			listItems: all('SELECT * FROM items ORDER BY activated_at, id').map((r) => ({
 				id: r.id as string,
@@ -141,7 +217,12 @@ export function exportData(db: DB): ExportData {
 				completedAt: iso(r.completed_at as number | null),
 				purchaseEventId: (r.cycle_id as string | null) ?? null,
 				createdAt: isoReq(r.created_at as number),
-				updatedAt: isoReq(r.updated_at as number)
+				updatedAt: isoReq(r.updated_at as number),
+				note: (r.note as string | null) ?? null,
+				substituteOk: r.substitute_ok === 1,
+				substituteNote: (r.substitute_note as string | null) ?? null,
+				unavailableAt: iso(r.unavailable_at as number | null),
+				position: (r.position as number) ?? 0
 			})),
 			purchaseEvents: all('SELECT * FROM cycles ORDER BY activated_at, id').map((r) => ({
 				id: r.id as string,
@@ -152,7 +233,9 @@ export function exportData(db: DB): ExportData {
 				completedAt: iso(r.completed_at as number | null),
 				cancelledAt: iso(r.cancelled_at as number | null),
 				quantity: (r.quantity as number | null) ?? null,
-				unit: (r.unit as string | null) ?? null
+				unit: (r.unit as string | null) ?? null,
+				requestedQuantity: (r.requested_quantity as number | null) ?? null,
+				purchasedQuantity: (r.purchased_quantity as number | null) ?? null
 			})),
 			aiRecommendations: all('SELECT * FROM ai_recommendations ORDER BY imported_at, id').map(
 				(r) => ({
@@ -169,10 +252,50 @@ export function exportData(db: DB): ExportData {
 					importedAt: isoReq(r.imported_at as number),
 					resolvedAt: iso(r.resolved_at as number | null)
 				})
-			)
+			),
+			productAliases: all('SELECT * FROM product_aliases ORDER BY alias_key').map((r) => ({
+				id: r.id as string,
+				productId: r.product_id as string,
+				alias: r.alias as string,
+				createdAt: isoReq(r.created_at as number)
+			})),
+			bundles: all('SELECT * FROM bundles ORDER BY name, id').map((b) => ({
+				id: b.id as string,
+				name: b.name as string,
+				servings: (b.servings as number | null) ?? null,
+				createdAt: isoReq(b.created_at as number),
+				updatedAt: isoReq(b.updated_at as number),
+				lines: (
+					db
+						.prepare('SELECT * FROM bundle_lines WHERE bundle_id = ? ORDER BY position, id')
+						.all(b.id) as R[]
+				).map((l) => ({
+					id: l.id as string,
+					productId: l.product_id as string,
+					quantity: (l.quantity as number | null) ?? null,
+					unit: (l.unit as string | null) ?? null,
+					note: (l.note as string | null) ?? null
+				}))
+			})),
+			media: all(
+				'SELECT * FROM media WHERE id IN (SELECT photo_id FROM products WHERE photo_id IS NOT NULL) ORDER BY id'
+			).map((m) => ({
+				id: m.id as string,
+				mime: m.mime as string,
+				width: m.width as number,
+				height: m.height as number,
+				bytes: m.bytes as number,
+				sha256: m.sha256 as string,
+				createdAt: isoReq(m.created_at as number),
+				file: `media/${m.id as string}.${mediaExt(m.mime as string)}`
+			}))
 		};
 	});
 	return read();
+}
+
+export function mediaExt(mime: string): string {
+	return mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
 }
 
 export function statisticsRows(data: ExportData, now = Date.now()) {
@@ -221,12 +344,17 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 export const MAX_RECORDS = 200_000;
 
 /** Validated import data with timestamps as epoch milliseconds. */
-export interface ImportList {
+export interface ImportCategory {
 	id: string;
 	name: string;
 	position: number;
 	createdAt: number;
 	updatedAt: number;
+}
+export interface ImportList extends ImportCategory {
+	kind: 'grocery' | 'checklist';
+	kindChangedAt: number | null;
+	categoryOrder: string[] | null;
 }
 export interface ImportProduct {
 	id: string;
@@ -235,6 +363,38 @@ export interface ImportProduct {
 	favorite: boolean;
 	createdAt: number;
 	updatedAt: number;
+	defaultQuantity: number | null;
+	defaultUnit: string | null;
+	preferredListId: string | null;
+	note: string | null;
+	photoId: string | null;
+	stockStatus: 'unknown' | 'enough' | 'low' | 'out';
+	stockUpdatedAt: number | null;
+}
+export interface ImportAlias {
+	id: string;
+	productId: string;
+	alias: string;
+	createdAt: number;
+}
+export interface ImportBundle {
+	id: string;
+	name: string;
+	servings: number | null;
+	createdAt: number;
+	updatedAt: number;
+	lines: {
+		id: string;
+		productId: string;
+		quantity: number | null;
+		unit: string | null;
+		note: string | null;
+	}[];
+}
+export interface ImportMedia {
+	id: string;
+	file: string;
+	createdAt: number;
 }
 export interface ImportEvent {
 	id: string;
@@ -245,6 +405,8 @@ export interface ImportEvent {
 	cancelledAt: number | null;
 	quantity: number | null;
 	unit: string | null;
+	requestedQuantity: number | null;
+	purchasedQuantity: number | null;
 }
 export interface ImportItem {
 	id: string;
@@ -258,6 +420,11 @@ export interface ImportItem {
 	purchaseEventId: string | null;
 	createdAt: number;
 	updatedAt: number;
+	note: string | null;
+	substituteOk: boolean;
+	substituteNote: string | null;
+	unavailableAt: number | null;
+	position: number;
 }
 export interface ImportRecommendation {
 	id: string;
@@ -275,11 +442,14 @@ export interface ImportRecommendation {
 }
 export interface ImportDataset {
 	lists: ImportList[];
-	categories: ImportList[];
+	categories: ImportCategory[];
 	products: ImportProduct[];
 	listItems: ImportItem[];
 	purchaseEvents: ImportEvent[];
 	aiRecommendations: ImportRecommendation[];
+	productAliases: ImportAlias[];
+	bundles: ImportBundle[];
+	media: ImportMedia[];
 }
 
 export class Validator {
@@ -358,6 +528,23 @@ export class Validator {
 		return null;
 	}
 
+	note(v: unknown, path: string): string | null {
+		if (v === null || v === undefined || v === '') return null;
+		if (typeof v === 'string') {
+			const n = cleanName(v);
+			if (n.length <= MAX_NOTE_LENGTH) return n || null;
+		}
+		this.error(path, `notitie langer dan ${MAX_NOTE_LENGTH} tekens`);
+		return null;
+	}
+
+	number(v: unknown, path: string, fallback: number): number {
+		if (v === undefined || v === null) return fallback;
+		if (typeof v === 'number' && Number.isFinite(v)) return v;
+		this.error(path, 'moet een getal zijn');
+		return fallback;
+	}
+
 	int(v: unknown, path: string, fallback: number): number {
 		if (v === undefined || v === null) return fallback;
 		if (typeof v === 'number' && Number.isInteger(v)) return v;
@@ -386,7 +573,9 @@ function legacyToCurrent(file: R): R {
 			name: r.name,
 			position: r.position,
 			createdAt: r.created_at,
-			updatedAt: r.updated_at
+			updatedAt: r.updated_at,
+			kind: r.kind,
+			kindChangedAt: r.kind_changed_at
 		})),
 		categories: rows('categories').map((r) => ({
 			id: r.id,
@@ -401,7 +590,14 @@ function legacyToCurrent(file: R): R {
 			categoryId: r.category_id,
 			favorite: r.favorite === 1 || r.favorite === true,
 			createdAt: r.created_at,
-			updatedAt: r.updated_at
+			updatedAt: r.updated_at,
+			defaultQuantity: r.default_quantity,
+			defaultUnit: r.default_unit,
+			preferredListId: r.preferred_list_id,
+			note: r.note,
+			photoId: r.photo_id,
+			stockStatus: r.stock_status,
+			stockUpdatedAt: r.stock_updated_at
 		})),
 		listItems: rows('items').map((r) => ({
 			id: r.id,
@@ -414,7 +610,13 @@ function legacyToCurrent(file: R): R {
 			completedAt: r.completed_at,
 			purchaseEventId: r.cycle_id,
 			createdAt: r.created_at,
-			updatedAt: r.updated_at
+			updatedAt: r.updated_at,
+			// Raw rows of newer databases carry these too; v1.0.0 rows simply lack them.
+			note: r.note,
+			substituteOk: r.substitute_ok === 1,
+			substituteNote: r.substitute_note,
+			unavailableAt: r.unavailable_at,
+			position: r.position
 		})),
 		purchaseEvents: rows('cycles').map((r) => ({
 			id: r.id,
@@ -424,9 +626,14 @@ function legacyToCurrent(file: R): R {
 			completedAt: r.completed_at,
 			cancelledAt: r.cancelled_at,
 			quantity: r.quantity,
-			unit: r.unit
+			unit: r.unit,
+			requestedQuantity: r.requested_quantity,
+			purchasedQuantity: r.purchased_quantity
 		})),
-		aiRecommendations: []
+		aiRecommendations: [],
+		productAliases: [],
+		bundles: [],
+		media: []
 	};
 }
 
@@ -441,7 +648,10 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		products: [],
 		listItems: [],
 		purchaseEvents: [],
-		aiRecommendations: []
+		aiRecommendations: [],
+		productAliases: [],
+		bundles: [],
+		media: []
 	};
 	const file = v.obj(input, 'bestand');
 	if (!file) return empty;
@@ -465,7 +675,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 	}
 	if (!data) return empty;
 
-	const list = (r: unknown, path: string): ImportList | null => {
+	const category = (r: unknown, path: string): ImportCategory | null => {
 		const o = v.obj(r, path);
 		if (!o) return null;
 		const createdAt = v.time(o.createdAt, `${path}.createdAt`);
@@ -477,6 +687,23 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			updatedAt: v.nullableTime(o.updatedAt, `${path}.updatedAt`) ?? createdAt
 		};
 	};
+	const list = (r: unknown, path: string): ImportList | null => {
+		const base = category(r, path);
+		if (!base) return null;
+		const o = r as R;
+		const kind = o.kind === undefined || o.kind === null ? 'grocery' : o.kind;
+		if (kind !== 'grocery' && kind !== 'checklist')
+			v.error(`${path}.kind`, 'moet "grocery" of "checklist" zijn');
+		let categoryOrder: string[] | null = null;
+		if (Array.isArray(o.categoryOrder))
+			categoryOrder = o.categoryOrder.map((c, i) => v.id(c, `${path}.categoryOrder[${i}]`));
+		return {
+			...base,
+			kind: kind === 'checklist' ? 'checklist' : 'grocery',
+			kindChangedAt: v.nullableTime(o.kindChangedAt, `${path}.kindChangedAt`),
+			categoryOrder
+		};
+	};
 
 	const out: ImportDataset = {
 		lists: v
@@ -485,12 +712,15 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			.filter((x): x is ImportList => !!x),
 		categories: v
 			.arr(data.categories, 'data.categories')
-			.map((r, i) => list(r, `categories[${i}]`))
-			.filter((x): x is ImportList => !!x),
+			.map((r, i) => category(r, `categories[${i}]`))
+			.filter((x): x is ImportCategory => !!x),
 		products: [],
 		listItems: [],
 		purchaseEvents: [],
-		aiRecommendations: []
+		aiRecommendations: [],
+		productAliases: [],
+		bundles: [],
+		media: []
 	};
 
 	v.arr(data.products, 'data.products').forEach((r, i) => {
@@ -498,13 +728,24 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const o = v.obj(r, p);
 		if (!o) return;
 		const createdAt = v.time(o.createdAt, `${p}.createdAt`);
+		const stock = o.stockStatus ?? 'unknown';
+		if (!['unknown', 'enough', 'low', 'out'].includes(stock as string))
+			v.error(`${p}.stockStatus`, 'moet unknown, enough, low of out zijn');
+		const defaultQuantity = v.quantity(o.defaultQuantity, `${p}.defaultQuantity`);
 		out.products.push({
 			id: v.id(o.id, `${p}.id`),
 			name: v.name(o.name, `${p}.name`),
 			categoryId: v.nullableId(o.categoryId, `${p}.categoryId`),
 			favorite: o.favorite === true,
 			createdAt,
-			updatedAt: v.nullableTime(o.updatedAt, `${p}.updatedAt`) ?? createdAt
+			updatedAt: v.nullableTime(o.updatedAt, `${p}.updatedAt`) ?? createdAt,
+			defaultQuantity,
+			defaultUnit: defaultQuantity === null ? null : v.unit(o.defaultUnit, `${p}.defaultUnit`),
+			preferredListId: v.nullableId(o.preferredListId, `${p}.preferredListId`),
+			note: v.note(o.note, `${p}.note`),
+			photoId: v.nullableId(o.photoId, `${p}.photoId`),
+			stockStatus: stock as ImportProduct['stockStatus'],
+			stockUpdatedAt: v.nullableTime(o.stockUpdatedAt, `${p}.stockUpdatedAt`)
 		});
 	});
 
@@ -520,8 +761,21 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			completedAt: v.nullableTime(o.completedAt, `${p}.completedAt`),
 			cancelledAt: v.nullableTime(o.cancelledAt, `${p}.cancelledAt`),
 			quantity: v.quantity(o.quantity, `${p}.quantity`),
-			unit: v.unit(o.unit, `${p}.unit`)
+			unit: v.unit(o.unit, `${p}.unit`),
+			requestedQuantity: null,
+			purchasedQuantity: null
 		};
+		// Format 1 has no requested/purchased split: the quantity was both.
+		ev.requestedQuantity =
+			o.requestedQuantity === undefined
+				? ev.quantity
+				: v.quantity(o.requestedQuantity, `${p}.requestedQuantity`);
+		ev.purchasedQuantity =
+			o.purchasedQuantity === undefined
+				? ev.completedAt !== null
+					? ev.quantity
+					: null
+				: v.quantity(o.purchasedQuantity, `${p}.purchasedQuantity`);
 		if (ev.completedAt !== null && ev.cancelledAt !== null)
 			v.error(p, 'kan niet zowel gekocht als geannuleerd zijn');
 		out.purchaseEvents.push(ev);
@@ -548,8 +802,66 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			completedAt: status === 'active' ? null : completedAt,
 			purchaseEventId: v.nullableId(o.purchaseEventId, `${p}.purchaseEventId`),
 			createdAt: v.nullableTime(o.createdAt, `${p}.createdAt`) ?? activatedAt,
-			updatedAt: v.nullableTime(o.updatedAt, `${p}.updatedAt`) ?? activatedAt
+			updatedAt: v.nullableTime(o.updatedAt, `${p}.updatedAt`) ?? activatedAt,
+			note: v.note(o.note, `${p}.note`),
+			substituteOk: o.substituteOk === true,
+			substituteNote: v.note(o.substituteNote, `${p}.substituteNote`),
+			unavailableAt:
+				status === 'active' ? v.nullableTime(o.unavailableAt, `${p}.unavailableAt`) : null,
+			position: v.number(o.position, `${p}.position`, activatedAt)
 		});
+	});
+
+	v.arr(data.productAliases, 'data.productAliases', false).forEach((r, i) => {
+		const p = `productAliases[${i}]`;
+		const o = v.obj(r, p);
+		if (!o) return;
+		out.productAliases.push({
+			id: v.id(o.id, `${p}.id`),
+			productId: v.id(o.productId, `${p}.productId`),
+			alias: v.name(o.alias, `${p}.alias`),
+			createdAt: v.nullableTime(o.createdAt, `${p}.createdAt`) ?? 0
+		});
+	});
+
+	v.arr(data.bundles, 'data.bundles', false).forEach((r, i) => {
+		const p = `bundles[${i}]`;
+		const o = v.obj(r, p);
+		if (!o) return;
+		const createdAt = v.nullableTime(o.createdAt, `${p}.createdAt`) ?? 0;
+		const servings = o.servings === null || o.servings === undefined ? null : o.servings;
+		if (servings !== null && !(typeof servings === 'number' && servings > 0 && servings <= 100))
+			v.error(`${p}.servings`, 'moet een getal tussen 0 en 100 zijn');
+		out.bundles.push({
+			id: v.id(o.id, `${p}.id`),
+			name: v.name(o.name, `${p}.name`),
+			servings: typeof servings === 'number' ? servings : null,
+			createdAt,
+			updatedAt: v.nullableTime(o.updatedAt, `${p}.updatedAt`) ?? createdAt,
+			lines: v.arr(o.lines, `${p}.lines`, false).map((l, j) => {
+				const lp = `${p}.lines[${j}]`;
+				const lo = v.obj(l, lp) ?? {};
+				const quantity = v.quantity(lo.quantity, `${lp}.quantity`);
+				return {
+					id: v.id(lo.id, `${lp}.id`),
+					productId: v.id(lo.productId, `${lp}.productId`),
+					quantity,
+					unit: quantity === null ? null : v.unit(lo.unit, `${lp}.unit`),
+					note: v.note(lo.note, `${lp}.note`)
+				};
+			})
+		});
+	});
+
+	v.arr(data.media, 'data.media', false).forEach((r, i) => {
+		const p = `media[${i}]`;
+		const o = v.obj(r, p);
+		if (!o) return;
+		const id = v.id(o.id, `${p}.id`);
+		const file = typeof o.file === 'string' ? o.file : '';
+		if (!/^media\/[A-Za-z0-9_-]{1,64}\.(jpg|png|webp)$/.test(file))
+			v.error(`${p}.file`, 'ongeldige bestandsnaam');
+		out.media.push({ id, file, createdAt: v.nullableTime(o.createdAt, `${p}.createdAt`) ?? 0 });
 	});
 
 	v.arr(data.aiRecommendations, 'data.aiRecommendations', false).forEach((r, i) => {
@@ -635,5 +947,37 @@ function checkIntegrity(d: ImportDataset, v: Validator) {
 	for (const r of d.aiRecommendations) {
 		if (!products.has(r.productId))
 			v.error(`aiRecommendation ${r.id}`, `onbekend product "${r.productId}"`);
+	}
+	unique(d.productAliases, 'productAliases');
+	unique(d.bundles, 'bundles');
+	unique(
+		d.bundles.flatMap((b) => b.lines),
+		'bundle lines'
+	);
+	const aliasKeys = new Set<string>();
+	for (const a of d.productAliases) {
+		const key = nameKey(a.alias);
+		if (!products.has(a.productId)) v.error(`alias ${a.id}`, `onbekend product "${a.productId}"`);
+		if (names.has(key)) v.error(`alias ${a.id}`, `"${a.alias}" is ook een productnaam`);
+		if (aliasKeys.has(key)) v.error(`alias ${a.id}`, `zoekwoord "${a.alias}" komt twee keer voor`);
+		aliasKeys.add(key);
+	}
+	for (const b of d.bundles) {
+		const seen = new Set<string>();
+		for (const l of b.lines) {
+			if (!products.has(l.productId))
+				v.error(`bundle ${b.id}`, `onbekend product "${l.productId}"`);
+			if (seen.has(l.productId)) v.error(`bundle ${b.id}`, 'product staat twee keer in de bundel');
+			seen.add(l.productId);
+		}
+	}
+	for (const l of d.lists) {
+		if (l.categoryOrder) l.categoryOrder = l.categoryOrder.filter((c) => categories.has(c));
+	}
+	for (const p of d.products) {
+		if (p.preferredListId && !lists.has(p.preferredListId)) {
+			v.warnings.push(`Product ${p.id}: voorkeurslijst bestaat niet in het bestand; weggelaten.`);
+			p.preferredListId = null;
+		}
 	}
 }

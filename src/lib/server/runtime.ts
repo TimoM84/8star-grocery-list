@@ -5,11 +5,13 @@ import { openDatabase, schemaVersion, type DB } from './db';
 import { GroceryStore } from './store';
 import { EventHub } from './events';
 import { createBackup, createBackupSync, listBackups, pruneBackups } from './backup';
+import { MediaStore } from './media';
 
 export interface Runtime {
 	config: Config;
 	db: DB;
 	store: GroceryStore;
+	media: MediaStore;
 	hub: EventHub;
 	lastBackupAt: number | null;
 	shutdown: () => void;
@@ -34,6 +36,7 @@ export function getRuntime(): Runtime {
 	log(`database ready at ${config.dbPath} (schema v${schemaVersion(db)})`);
 
 	const store = new GroceryStore(db);
+	const media = new MediaStore(db, config.mediaDir);
 	const hub = new EventHub();
 	store.onChange((seq) => hub.broadcast(seq));
 
@@ -42,6 +45,7 @@ export function getRuntime(): Runtime {
 		config,
 		db,
 		store,
+		media,
 		hub,
 		lastBackupAt: listBackups(config.backupDir)[0]?.createdAt ?? null,
 		shutdown: () => {
@@ -78,10 +82,25 @@ export function getRuntime(): Runtime {
 		timers.push(t);
 	}
 
-	const pruneTimer = setInterval(() => store.pruneOps(), 6 * 60 * 60 * 1000);
+	const prune = () => {
+		store.pruneOps();
+		try {
+			const removed = media.gc();
+			if (removed) log(`removed ${removed} unused photo(s)`);
+		} catch (e) {
+			log(`photo cleanup failed: ${(e as Error).message}`);
+		}
+	};
+	const pruneTimer = setInterval(prune, 6 * 60 * 60 * 1000);
 	pruneTimer.unref();
 	timers.push(pruneTimer);
-	store.pruneOps();
+	prune();
+
+	// Ends forgotten shopping rounds and drops expired claims.
+	const presenceTimer = setInterval(() => store.maintenance(), 5 * 60 * 1000);
+	presenceTimer.unref();
+	timers.push(presenceTimer);
+	store.maintenance();
 
 	let stopping = false;
 	const stop = () => {

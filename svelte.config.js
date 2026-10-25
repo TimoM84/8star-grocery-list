@@ -44,7 +44,8 @@ const config = {
 				'default-src': ['self'],
 				'script-src': ['self'],
 				'style-src': ['self', 'unsafe-inline'],
-				'img-src': ['self', 'data:'],
+				// blob: shows photos that are still waiting for upload (offline queue).
+				'img-src': ['self', 'data:', 'blob:'],
 				'connect-src': ['self'],
 				'manifest-src': ['self'],
 				'worker-src': ['self'],

@@ -37,7 +37,7 @@ ENV NODE_ENV=production \
 	PORT=3000 \
 	HOST=0.0.0.0 \
 	DATA_DIR=/data \
-	BODY_SIZE_LIMIT=25M
+	BODY_SIZE_LIMIT=100M
 WORKDIR /app
 
 COPY --from=build --chown=node:node /app/build ./build
