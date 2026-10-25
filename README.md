@@ -22,7 +22,13 @@ New in 1.2:
   <img src="docs/screenshots/v12-acties-390-dark.png" width="200" alt="Item actions in the shop, dark mode" />
   <img src="docs/screenshots/v12-bundel-390-light.png" width="200" alt="Adding a bundle" />
   <img src="docs/screenshots/v12-meerdere-390-light.png" width="200" alt="Pasting several lines" />
+  <img src="docs/screenshots/v12-winkelstand-390-dark.png" width="200" alt="Winkelstand, dark mode" />
+  <img src="docs/screenshots/v12-edit-390-light.png" width="200" alt="Edit sheet with note and substitute" />
+  <img src="docs/screenshots/v12-beheer-390-light.png" width="200" alt="Beheer: sync, device and list settings" />
 </p>
+
+Screenshots are produced by the Playwright suite (`npm run test:e2e` writes them to
+`screenshots/`); the ones above were refreshed from v1.2.0.
 
 ## Features
 
