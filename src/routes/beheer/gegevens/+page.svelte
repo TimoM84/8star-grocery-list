@@ -2,6 +2,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ImportPanel from '$lib/components/ImportPanel.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
+	import { app } from '$lib/client/app.svelte';
 
 	const exports: { href: string; label: string; detail: string; icon: IconName; testid: string }[] =
 		[
@@ -113,26 +114,28 @@
 		</ul>
 	</section>
 
-	<section aria-labelledby="ai-title" class="rounded-2xl bg-accent-soft/60 p-4">
-		<h2 id="ai-title" class="mb-2 flex items-center gap-2 text-lg font-bold">
-			<Icon name="brain" size={20} class="text-accent" /> Analyseren met AI
-		</h2>
-		<ol class="list-decimal space-y-1 pl-5 text-base">
-			<li>Download de <strong>volledige export (JSON)</strong> hierboven.</li>
-			<li>
-				Geef die samen met de <strong>AI-opdracht</strong> aan ChatGPT, Claude of je eigen Python-script.
-			</li>
-			<li>Importeer het antwoord bij <strong>Suggesties → AI-suggesties</strong>.</li>
-		</ol>
-		<a
-			href="/api/export?format=ai-prompt"
-			download
-			class="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-surface px-4 font-semibold shadow-card active:bg-surface-2"
-			data-testid="export-ai-prompt"
-		>
-			<Icon name="download" size={20} class="text-accent" /> AI-opdracht downloaden
-		</a>
-	</section>
+	{#if app.aiEnabled}
+		<section aria-labelledby="ai-title" class="rounded-2xl bg-accent-soft/60 p-4">
+			<h2 id="ai-title" class="mb-2 flex items-center gap-2 text-lg font-bold">
+				<Icon name="brain" size={20} class="text-accent" /> Analyseren met AI
+			</h2>
+			<ol class="list-decimal space-y-1 pl-5 text-base">
+				<li>Download de <strong>volledige export (JSON)</strong> hierboven.</li>
+				<li>
+					Geef die samen met de <strong>AI-opdracht</strong> aan ChatGPT, Claude of je eigen Python-script.
+				</li>
+				<li>Importeer het antwoord bij <strong>Suggesties → AI-suggesties</strong>.</li>
+			</ol>
+			<a
+				href="/api/export?format=ai-prompt"
+				download
+				class="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-surface px-4 font-semibold shadow-card active:bg-surface-2"
+				data-testid="export-ai-prompt"
+			>
+				<Icon name="download" size={20} class="text-accent" /> AI-opdracht downloaden
+			</a>
+		</section>
+	{/if}
 
 	<section aria-labelledby="import-title" class="pb-4">
 		<h2 id="import-title" class="mb-3 text-lg font-bold">Importeren</h2>

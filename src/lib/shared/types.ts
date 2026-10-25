@@ -1,5 +1,7 @@
 /** Shared domain types used by both the server and the client. */
 
+import type { Settings } from './settings';
+
 export type ItemStatus = 'active' | 'completed';
 
 /** A grocery list records purchases; a checklist (packing, chores…) never does. */
@@ -176,6 +178,8 @@ export interface Snapshot {
 	rounds: Round[];
 	/** Unexpired claims. */
 	claims: Claim[];
+	/** Household-wide settings (absent in snapshots of servers before v1.3). */
+	settings: Settings;
 }
 
 export type SortMode = 'newest' | 'oldest' | 'az';

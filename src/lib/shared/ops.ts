@@ -8,10 +8,10 @@ import { UNITS } from './quantity';
 import type { ListKind, StockStatus } from './types';
 
 /**
- * Sync protocol version. 1 = v1.0/v1.1, 2 = v1.2 (intent ops, rounds, bundles…). Servers keep
- * accepting every op type of older protocols; see docs/SYNC.md.
+ * Sync protocol version. 1 = v1.0/v1.1, 2 = v1.2 (intent ops, rounds, bundles…), 3 = v1.3
+ * (shared settings). Servers keep accepting every op type of older protocols; see docs/SYNC.md.
  */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface ItemChanges {
 	quantity?: number | null;
@@ -138,6 +138,7 @@ export type OpPayload =
 	| { type: 'round.end'; roundId: string; deviceId: string }
 	| { type: 'ai.accept'; recommendationId: string; listId: string; itemId: string }
 	| { type: 'ai.dismiss'; recommendationId: string }
+	| { type: 'settings.update'; aiEnabled: boolean }
 	| { type: 'undo'; targetOpId: string };
 
 export type Op = OpBase & OpPayload;
@@ -620,6 +621,8 @@ export function parseOp(raw: unknown): Op {
 				type: raw.type,
 				recommendationId: id(raw.recommendationId, 'recommendationId')
 			};
+		case 'settings.update':
+			return { ...base, type: raw.type, aiEnabled: bool(raw.aiEnabled, 'aiEnabled') };
 		case 'undo':
 			return { ...base, type: raw.type, targetOpId: id(raw.targetOpId, 'targetOpId') };
 		default:

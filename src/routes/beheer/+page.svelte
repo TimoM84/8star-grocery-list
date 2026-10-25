@@ -246,6 +246,38 @@
 		</div>
 	</section>
 
+	<section aria-labelledby="features-title">
+		<h2 id="features-title" class="mb-3 text-lg font-bold">Functies</h2>
+		<div class="rounded-2xl bg-surface p-4 shadow-card" data-testid="features-card">
+			<button
+				type="button"
+				role="switch"
+				aria-checked={app.aiEnabled}
+				class="flex min-h-12 w-full items-center gap-3 text-left"
+				onclick={() => app.setAiEnabled(!app.aiEnabled)}
+				data-testid="setting-ai"
+			>
+				<span class="min-w-0 flex-1">
+					<span class="block font-semibold">AI-functies tonen</span>
+					<span class="block text-sm text-muted"
+						>AI-suggesties, AI-bestand importeren en de AI-opdracht. Geldt voor alle apparaten;
+						uitzetten verbergt ze alleen, er wordt niets verwijderd.</span
+					>
+				</span>
+				<span
+					class="relative h-8 w-14 shrink-0 rounded-full transition-colors {app.aiEnabled
+						? 'bg-accent'
+						: 'bg-surface-3'}"
+					><span
+						class="absolute top-1 h-6 w-6 rounded-full bg-surface shadow transition-all {app.aiEnabled
+							? 'left-7'
+							: 'left-1'}"
+					></span></span
+				>
+			</button>
+		</div>
+	</section>
+
 	<section aria-labelledby="lists-title">
 		<h2 id="lists-title" class="mb-1 text-lg font-bold">Lijsten</h2>
 		<p class="mb-3 text-sm text-muted">
@@ -308,7 +340,9 @@
 				<Icon name="upload" size={20} class="shrink-0 text-accent" />
 				<span class="min-w-0 flex-1">
 					<span class="block">Importeren &amp; exporteren</span>
-					<span class="block text-sm font-normal text-muted">JSON, CSV, ZIP en AI-analyse</span>
+					<span class="block text-sm font-normal text-muted"
+						>{app.aiEnabled ? 'JSON, CSV, ZIP en AI-analyse' : 'JSON, CSV en ZIP'}</span
+					>
 				</span>
 				<Icon name="arrowRight" size={18} class="shrink-0 text-faint" />
 			</a>

@@ -30,6 +30,11 @@ Other CSV datasets: `type=lists`, `type=categories`, `type=list-items`.
 missing ones the product simply has no photo (the report says how many).
 ² CSV imports add products and purchase history; they are not a full restore.
 
+**Household settings** (v1.3, `data.settings`, e.g. `{ "aiEnabled": false }`) are exported and
+restored by **Alles vervangen**. Files without settings (older exports) keep the current
+settings. **Samenvoegen** never changes settings; the report says so when the file's setting
+differs.
+
 **Never exported** (temporary or device-local, rebuilt or simply absent after a restore): active
 shopping rounds and participants, “Ik pak dit” claims, device names, shared “Niet nu” snoozes,
 the sync operation log and id aliases. A restore ends any running round.
@@ -180,7 +185,8 @@ no notes, no photo).
 				"importedAt": "…",
 				"resolvedAt": null
 			}
-		]
+		],
+		"settings": { "aiEnabled": true } // v1.3, optional: household settings
 	},
 	"statistics": [/* derived per product; informational, ignored on import */]
 }

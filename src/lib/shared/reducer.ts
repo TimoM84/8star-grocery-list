@@ -23,6 +23,7 @@ import type {
 import type { AddManyEntry, Op } from './ops';
 import { capitaliseFirst, cleanName, compareNl, nameKey } from './text';
 import { convertQuantity, roundQuantity } from './quantity';
+import { normaliseSettings } from './settings';
 
 /** Local before-images used to optimistically undo an op that the server already applied. */
 export interface RestoreHint {
@@ -133,7 +134,8 @@ export function cloneSnapshot(s: Snapshot): Snapshot {
 			...r,
 			participants: r.participants.map((p) => ({ ...p }))
 		})),
-		claims: (s.claims ?? []).map((c) => ({ ...c }))
+		claims: (s.claims ?? []).map((c) => ({ ...c })),
+		settings: normaliseSettings(s.settings)
 	};
 }
 
@@ -695,6 +697,9 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 		}
 		case 'ai.dismiss':
 			s.aiRecommendations = s.aiRecommendations.filter((r) => r.id !== op.recommendationId);
+			return;
+		case 'settings.update':
+			s.settings = { ...s.settings, aiEnabled: op.aiEnabled };
 			return;
 		case 'undo':
 			if (op.restore) applyRestore(s, op.restore, aliases);
