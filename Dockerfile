@@ -29,7 +29,7 @@ RUN npm run build \
 
 # ---------- 3. runtime ----------
 FROM node:22-bookworm-slim AS runtime
-ARG APP_VERSION=1.2.0
+ARG APP_VERSION=1.3.0
 LABEL org.opencontainers.image.title="8star Grocery List" \
 	org.opencontainers.image.version="${APP_VERSION}" \
 	org.opencontainers.image.source="https://github.com/TimoM84/8star-grocery-list"
