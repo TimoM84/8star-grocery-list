@@ -285,7 +285,7 @@
 							: `Nog ${remaining} producten`}
 				</p>
 			</div>
-			<div class="ml-auto flex items-center gap-2">
+			<div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2">
 				<SyncBadge />
 				<button
 					type="button"

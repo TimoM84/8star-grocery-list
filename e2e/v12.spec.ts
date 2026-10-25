@@ -372,6 +372,24 @@ test.describe('3b · offline start', () => {
 
 		await context.setOffline(true);
 		await row(page, 'Brood').getByTestId('item-toggle').click();
+		// The tick is durable once it sits in the IndexedDB queue; reload only after that.
+		await expect
+			.poll(() =>
+				page.evaluate(
+					() =>
+						new Promise<number>((resolve) => {
+							const open = indexedDB.open('8star-grocery');
+							open.onsuccess = () => {
+								const req = open.result.transaction('pending').objectStore('pending').count();
+								req.onsuccess = () => {
+									open.result.close();
+									resolve(req.result);
+								};
+							};
+						})
+				)
+			)
+			.toBeGreaterThan(0);
 		await page.reload();
 		await expect(page.getByTestId('shopping-bar')).toBeVisible();
 		await expect(row(page, 'Kaas').getByTestId('item-note')).toContainText('jong belegen');
@@ -542,7 +560,12 @@ test('6 · checklists never count as purchases; reset with preview and undo', as
 		.click();
 	await expect(page.getByTestId('confirm-dialog')).toContainText('geschiedenis blijft bewaard');
 	await page.getByTestId('confirm-ok').click();
-	await page.goto('/');
+	await expect(
+		page
+			.locator('[data-testid=list-settings][data-name=Vakantie]')
+			.getByTestId('list-kind-checklist')
+	).toHaveAttribute('aria-checked', 'true');
+	await page.getByTestId('nav-lijst').click();
 	await page.getByTestId('list-chip').filter({ hasText: 'Vakantie' }).click();
 	await expect(page.getByTestId('shopping-enter')).toHaveCount(0);
 	await addItems(page, 'Paspoort', 'Zonnebrand', 'Opladers');
