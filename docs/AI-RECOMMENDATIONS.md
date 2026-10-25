@@ -4,7 +4,9 @@
 Claude, a local model or a Python script) and import the result as **AI-suggesties**:
 
 1. **Beheer → Gegevens → Volledige export (JSON)**, or the CSV ZIP for spreadsheets/pandas.
-2. **Beheer → Gegevens → AI-opdracht downloaden**: ready-made instructions that include the exact
+2. **Beheer → Gegevens → AI-opdracht downloaden** (Settings → Data → Download AI prompt):
+   ready-made instructions, in English or Dutch, that ask for explanations in the household
+   language and include the exact
    output format below.
 3. Give both to the AI tool and save its answer as a `.json` file.
 4. **Suggesties → AI-suggesties → AI-bestand importeren**: check the preview, then _Importeren_.

@@ -34,6 +34,8 @@ import {
 import { capitaliseFirst, cleanName, compareNl, nameKey } from '$lib/shared/text';
 import { convertQuantity, formatQuantity, roundQuantity } from '$lib/shared/quantity';
 import { readSettings, writeSettings } from './settings';
+import { householdMessages } from './i18n';
+import { decimalSeparator, type Messages } from '$lib/shared/i18n';
 
 /** Max completion timestamps per product included in snapshots (enough for local stats). */
 export const SNAPSHOT_COMPLETIONS = 200;
@@ -241,6 +243,20 @@ export class GroceryStore {
 
 	get seq(): number {
 		return this.seqValue;
+	}
+
+	/** Messages for rejections and conflicts, in the household language. */
+	private get t(): Messages {
+		return householdMessages(this.db);
+	}
+
+	/** A quantity for a message, with translated unit names. */
+	private qty(quantity: number | null, unit: string | null): string {
+		return formatQuantity(quantity, unit, {
+			units: this.t.units,
+			unitsPlural: this.t.unitsPlural,
+			decimal: decimalSeparator(readSettings(this.db).language)
+		});
 	}
 
 	/** Identifies the current dataset; changes when everything is replaced (restore/import). */
@@ -506,7 +522,9 @@ export class GroceryStore {
 				opId: rawId,
 				status: 'rejected',
 				reason: 'invalid',
-				message: 'Ongeldige wijziging: ' + (e instanceof ValidationError ? e.message : 'onbekend')
+				message: this.t.server.invalidOp(
+					e instanceof ValidationError ? e.message : this.t.server.unknown
+				)
 			};
 		}
 
@@ -565,7 +583,7 @@ export class GroceryStore {
 					opId: op.id,
 					status: 'rejected',
 					reason: 'constraint',
-					message: 'Wijziging kon niet worden opgeslagen (conflict met bestaande gegevens).'
+					message: this.t.server.constraint
 				};
 			}
 			throw e;
@@ -720,21 +738,14 @@ export class GroceryStore {
 
 	private item(id: string): ItemRow {
 		const row = this.row<ItemRow>('items', this.resolve(id));
-		if (!row)
-			throw new Rejection(
-				'not_found',
-				'Dit item bestaat niet meer (verwijderd op een ander apparaat).'
-			);
+		if (!row) throw new Rejection('not_found', this.t.server.itemGone);
 		return row;
 	}
 
 	private activeItem(id: string): ItemRow {
 		const item = this.item(id);
 		if (item.status !== 'active')
-			throw new Rejection(
-				'not_active',
-				`“${this.itemName(item)}” staat niet meer op de lijst (intussen afgevinkt).`
-			);
+			throw new Rejection('not_active', this.t.server.itemTicked(this.itemName(item)));
 		return item;
 	}
 
@@ -744,13 +755,13 @@ export class GroceryStore {
 
 	private list(id: string): ListRow {
 		const row = this.row<ListRow>('lists', this.resolve(id));
-		if (!row) throw new Rejection('list_not_found', 'Deze lijst bestaat niet meer.');
+		if (!row) throw new Rejection('list_not_found', this.t.server.listGone);
 		return row;
 	}
 
 	private product(id: string): ProductRow {
 		const row = this.row<ProductRow>('products', this.resolve(id));
-		if (!row) throw new Rejection('not_found', 'Dit product bestaat niet meer.');
+		if (!row) throw new Rejection('not_found', this.t.server.productGone);
 		return row;
 	}
 
@@ -856,9 +867,7 @@ export class GroceryStore {
 		if (rows.some((r) => r.id !== exceptId && nameKey(r.name) === key)) {
 			throw new Rejection(
 				'duplicate',
-				table === 'lists'
-					? `Er bestaat al een lijst “${name}”.`
-					: `Er bestaat al een categorie “${name}”.`
+				table === 'lists' ? this.t.toast.listExists(name) : this.t.toast.categoryExists(name)
 			);
 		}
 	}
@@ -896,8 +905,7 @@ export class GroceryStore {
 				const list = this.row<ListRow>('lists', this.resolve(op.listId));
 				if (!list) return { status: 'noop', reason: 'not_found' };
 				const count = (this.db.prepare('SELECT COUNT(*) AS n FROM lists').get() as { n: number }).n;
-				if (count <= 1)
-					throw new Rejection('last_list', 'De laatste lijst kan niet worden verwijderd.');
+				if (count <= 1) throw new Rejection('last_list', this.t.server.lastList);
 				for (const item of this.db
 					.prepare("SELECT * FROM items WHERE list_id = ? AND status = 'active'")
 					.all(list.id) as ItemRow[]) {
@@ -943,10 +951,7 @@ export class GroceryStore {
 			case 'list.resetChecklist': {
 				const list = this.list(op.listId);
 				if (list.kind !== 'checklist')
-					throw new Rejection(
-						'not_checklist',
-						'Alleen een checklist kan opnieuw worden klaargezet.'
-					);
+					throw new Rejection('not_checklist', this.t.server.notChecklist);
 				let n = 0;
 				for (const rawId of op.itemIds) {
 					const item = this.row<ItemRow>('items', this.resolve(rawId));
@@ -986,7 +991,7 @@ export class GroceryStore {
 			}
 			case 'category.rename': {
 				const cat = this.row<CategoryRow>('categories', op.categoryId);
-				if (!cat) throw new Rejection('not_found', 'Deze categorie bestaat niet meer.');
+				if (!cat) throw new Rejection('not_found', this.t.server.categoryGone);
 				const name = cleanName(op.name);
 				if (cat.name === name) return { status: 'noop', reason: 'unchanged' };
 				this.uniqueName('categories', name, cat.id);
@@ -1075,7 +1080,7 @@ export class GroceryStore {
 			case 'item.setUnavailable': {
 				const item = this.item(op.itemId);
 				if (this.list(item.list_id).kind !== 'grocery')
-					throw new Rejection('not_grocery', 'Dit kan alleen op een boodschappenlijst.');
+					throw new Rejection('not_grocery', this.t.server.groceryOnly);
 				if (op.unavailable && item.status !== 'active')
 					return { status: 'noop', reason: 'not_active', itemId: item.id };
 				if (op.unavailable === (item.unavailable_at !== null))
@@ -1168,10 +1173,7 @@ export class GroceryStore {
 				if (op.mediaId === product.photo_id)
 					return { status: 'noop', reason: 'unchanged', productId: product.id };
 				if (op.mediaId && !this.row('media', op.mediaId))
-					throw new Rejection(
-						'media_missing',
-						'De foto is niet op de server aangekomen. Kies de foto opnieuw.'
-					);
+					throw new Rejection('media_missing', this.t.server.mediaMissing);
 				this.capture('products', product.id);
 				this.db
 					.prepare(
@@ -1210,20 +1212,14 @@ export class GroceryStore {
 					.prepare('SELECT name FROM products WHERE name_key = ?')
 					.get(key) as { name: string } | undefined;
 				if (nameClash)
-					throw new Rejection(
-						'duplicate',
-						`“${alias}” is al de naam van het product “${nameClash.name}”.`
-					);
+					throw new Rejection('duplicate', this.t.server.aliasIsName(alias, nameClash.name));
 				const aliasClash = this.db
 					.prepare(
 						'SELECT p.name FROM product_aliases a JOIN products p ON p.id = a.product_id WHERE a.alias_key = ?'
 					)
 					.get(key) as { name: string } | undefined;
 				if (aliasClash)
-					throw new Rejection(
-						'duplicate',
-						`“${alias}” is al een zoekwoord voor “${aliasClash.name}”.`
-					);
+					throw new Rejection('duplicate', this.t.server.aliasIsAlias(alias, aliasClash.name));
 				this.capture('product_aliases', op.aliasId);
 				this.db
 					.prepare(
@@ -1299,7 +1295,7 @@ export class GroceryStore {
 			}
 			case 'settings.update':
 				// Hiding features never deletes data: AI suggestions stay stored and come back as is.
-				return writeSettings(this.db, { aiEnabled: op.aiEnabled })
+				return writeSettings(this.db, { aiEnabled: op.aiEnabled, language: op.language })
 					? { status: 'applied' }
 					: { status: 'noop', reason: 'unchanged' };
 			case 'undo':
@@ -1453,7 +1449,7 @@ export class GroceryStore {
 			return {
 				status: 'noop',
 				reason: 'duplicate',
-				message: `“${product.name}” staat al op de lijst.`,
+				message: this.t.server.alreadyOnList(product.name),
 				itemId: existing.id,
 				productId: product.id
 			};
@@ -1583,21 +1579,21 @@ export class GroceryStore {
 		now: number,
 		record: boolean
 	): number {
-		if (item.status !== 'active')
-			throw new Rejection('not_active', `“${name}” staat niet meer op de lijst.`);
+		if (item.status !== 'active') throw new Rejection('not_active', this.t.server.notOnList(name));
 		if (item.quantity === null)
-			throw new Rejection(
-				'unknown_quantity',
-				`Het aantal van “${name}” is onbekend. Kies eerst een aantal.`
-			);
+			throw new Rejection('unknown_quantity', this.t.server.unknownQtyChoose(name));
 		const converted = convertQuantity(delta, unit, item.unit);
 		if (converted === null)
 			throw new Rejection(
 				'incompatible_unit',
-				`“${name}” staat er al op als ${formatQuantity(item.quantity, item.unit)}; ${formatQuantity(delta, unit)} is een andere eenheid. Kies eerst wat je wilt.`
+				this.t.server.incompatibleUnit(
+					name,
+					this.qty(item.quantity, item.unit),
+					this.qty(delta, unit)
+				)
 			);
 		const next = roundQuantity(item.quantity + converted);
-		if (next >= 100000) throw new Rejection('too_large', 'Dat aantal is te groot.');
+		if (next >= 100000) throw new Rejection('too_large', this.t.server.tooLarge);
 		if (!record) this.capture('items', item.id);
 		this.db
 			.prepare('UPDATE items SET quantity = ?, updated_at = ?, version = version + 1 WHERE id = ?')
@@ -1641,14 +1637,13 @@ export class GroceryStore {
 		const item = this.activeItem(op.itemId);
 		const name = this.itemName(item);
 		if (this.list(item.list_id).kind !== 'grocery')
-			throw new Rejection('not_grocery', 'Deels gehaald kan alleen op een boodschappenlijst.');
+			throw new Rejection('not_grocery', this.t.server.partialGroceryOnly);
 		if (item.quantity === null)
-			throw new Rejection('unknown_quantity', `Het aantal van “${name}” is onbekend.`);
+			throw new Rejection('unknown_quantity', this.t.server.unknownQty(name));
 		const bought = convertQuantity(op.quantity, op.unit, item.unit);
-		if (bought === null)
-			throw new Rejection('incompatible_unit', `Gebruik de eenheid van “${name}”.`);
+		if (bought === null) throw new Rejection('incompatible_unit', this.t.server.useUnitOf(name));
 		if (bought >= item.quantity)
-			throw new Rejection('use_complete', `Alles van “${name}” gehaald? Vink het product dan af.`);
+			throw new Rejection('use_complete', this.t.server.useComplete(name));
 		let cycle = this.cycle(item.cycle_id);
 		let cycleId = item.cycle_id;
 		if (!cycle || cycle.completed_at !== null) {
@@ -1747,7 +1742,7 @@ export class GroceryStore {
 			...(conflicts.length
 				? {
 						conflicts,
-						message: `“${this.itemName(item)}” was intussen op een ander apparaat gewijzigd. Jouw wijziging is opgeslagen.`
+						message: this.t.server.changedElsewhere(this.itemName(item))
 					}
 				: {})
 		};
@@ -1809,7 +1804,10 @@ export class GroceryStore {
 				status: 'noop',
 				reason: 'claimed',
 				itemId: item.id,
-				message: `${(existing.device_name as string | null) ?? 'Iemand anders'} pakt “${this.itemName(item)}” al.`
+				message: this.t.server.claimedBy(
+					(existing.device_name as string | null) ?? this.t.common.someoneElse,
+					this.itemName(item)
+				)
 			};
 		}
 		const round = this.db
@@ -1904,7 +1902,7 @@ export class GroceryStore {
 		op.lines.forEach((l, i) => {
 			const product = this.ensureProduct(l.name, l.productId, null, `${op.id}-${i}`, ts, now);
 			if (seen.has(product.id))
-				throw new Rejection('duplicate', `“${product.name}” staat twee keer in de bundel.`);
+				throw new Rejection('duplicate', this.t.server.bundleDuplicate(product.name));
 			seen.add(product.id);
 			let lineId = l.lineId;
 			const clash = this.row<Row>('bundle_lines', lineId);
@@ -1925,8 +1923,7 @@ export class GroceryStore {
 
 	private joinRound(op: Extract<Op, { type: 'round.join' }>, ts: number, now: number): Outcome {
 		const list = this.list(op.listId);
-		if (list.kind !== 'grocery')
-			throw new Rejection('not_grocery', 'Een winkelronde kan alleen op een boodschappenlijst.');
+		if (list.kind !== 'grocery') throw new Rejection('not_grocery', this.t.server.roundGroceryOnly);
 		let round = this.db
 			.prepare('SELECT * FROM rounds WHERE list_id = ? AND ended_at IS NULL')
 			.get(list.id) as RoundRow | undefined;
@@ -1971,7 +1968,7 @@ export class GroceryStore {
 
 	private recommendation(id: string): AiRecommendationRow {
 		const rec = this.row<AiRecommendationRow>('ai_recommendations', id);
-		if (!rec) throw new Rejection('not_found', 'Deze AI-suggestie bestaat niet meer.');
+		if (!rec) throw new Rejection('not_found', this.t.server.recGone);
 		return rec;
 	}
 
@@ -2038,18 +2035,17 @@ export class GroceryStore {
 			const clash = this.db
 				.prepare('SELECT id, name FROM products WHERE name_key = ? AND id != ?')
 				.get(key, product.id) as { id: string; name: string } | undefined;
-			if (clash) throw new Rejection('duplicate', `Er bestaat al een product “${clash.name}”.`);
+			if (clash) throw new Rejection('duplicate', this.t.server.productExists(clash.name));
 			const aliasClash = this.db
 				.prepare('SELECT product_id FROM product_aliases WHERE alias_key = ? AND product_id != ?')
 				.get(key, product.id);
-			if (aliasClash)
-				throw new Rejection('duplicate', `“${name}” is al een zoekwoord voor een ander product.`);
+			if (aliasClash) throw new Rejection('duplicate', this.t.server.aliasOfOther(name));
 			next.name = name;
 		}
 		if (op.changes.categoryId !== undefined) {
 			const cid = op.changes.categoryId;
 			if (cid !== null && !this.row('categories', cid))
-				throw new Rejection('category_not_found', 'Deze categorie bestaat niet meer.');
+				throw new Rejection('category_not_found', this.t.server.categoryGone);
 			next.categoryId = cid;
 		}
 		if (op.changes.favorite !== undefined) next.favorite = op.changes.favorite;
@@ -2059,7 +2055,7 @@ export class GroceryStore {
 		if ('preferredListId' in op.changes) {
 			const lid = op.changes.preferredListId ?? null;
 			if (lid !== null && !this.row('lists', this.resolve(lid)))
-				throw new Rejection('list_not_found', 'Deze lijst bestaat niet meer.');
+				throw new Rejection('list_not_found', this.t.server.listGone);
 			next.preferredListId = lid === null ? null : this.resolve(lid);
 		}
 		if ('note' in op.changes) next.note = op.changes.note ?? null;
@@ -2103,7 +2099,7 @@ export class GroceryStore {
 			...(conflicts.length
 				? {
 						conflicts,
-						message: `“${next.name}” was intussen op een ander apparaat gewijzigd. Jouw wijziging is opgeslagen.`
+						message: this.t.server.changedElsewhere(next.name)
 					}
 				: {})
 		};
@@ -2115,7 +2111,7 @@ export class GroceryStore {
 			.get(targetOpId) as
 			{ type: string; inverse: string | null; undone_at: number | null } | undefined;
 		if (!target) {
-			throw new Rejection('unknown_op', 'Ongedaan maken is niet meer mogelijk.');
+			throw new Rejection('unknown_op', this.t.common.undoUnavailable);
 		}
 		if (target.undone_at) return { status: 'noop', reason: 'already_undone' };
 		if (!target.inverse) return { status: 'noop', reason: 'nothing_to_undo' };
@@ -2129,10 +2125,7 @@ export class GroceryStore {
 
 		for (const g of inverse.guards) {
 			if (this.stamp(g.table, g.id) !== g.version) {
-				throw new Rejection(
-					'conflict',
-					'Ongedaan maken kan niet: dit is intussen op een ander apparaat gewijzigd.'
-				);
+				throw new Rejection('conflict', this.t.server.undoChangedElsewhere);
 			}
 		}
 
@@ -2180,17 +2173,13 @@ export class GroceryStore {
 				this.db.prepare(sql).run(...cols.map((c) => before[c] as never));
 			} catch (e) {
 				if (String((e as { code?: string }).code).startsWith('SQLITE_CONSTRAINT'))
-					throw new Rejection(
-						'conflict',
-						'Ongedaan maken kan niet: er bestaat inmiddels iets vergelijkbaars.'
-					);
+					throw new Rejection('conflict', this.t.server.undoSimilarExists);
 				throw e;
 			}
 		}
 		// Rows whose parent list vanished in the meantime cannot be restored.
 		const fk = this.db.pragma('foreign_key_check') as unknown[];
-		if (fk.length)
-			throw new Rejection('conflict', 'Ongedaan maken kan niet: de lijst bestaat niet meer.');
+		if (fk.length) throw new Rejection('conflict', this.t.server.undoListGone);
 
 		this.db.prepare('UPDATE ops SET undone_at = ? WHERE id = ?').run(now, targetOpId);
 		return { status: 'applied', reason: 'undone' };
@@ -2204,10 +2193,7 @@ export class GroceryStore {
 	private undoSemantic(inv: SemanticInverse, now: number) {
 		const item = this.row<ItemRow>('items', inv.itemId);
 		const refuse = () => {
-			throw new Rejection(
-				'conflict',
-				'Ongedaan maken kan niet: het aantal is intussen op een andere manier gewijzigd.'
-			);
+			throw new Rejection('conflict', this.t.server.undoQtyChanged);
 		};
 		if (
 			!item ||

@@ -1,6 +1,6 @@
 /**
  * Reactive application state for the UI. Wraps the SyncEngine and exposes user actions with
- * Dutch feedback (toasts with undo). Every mutation is an explicit intent: entering something
+ * feedback in the household language (toasts with undo). Every mutation is an explicit intent: entering something
  * that is already on the list never changes it silently, it opens a choice instead.
  */
 
@@ -32,7 +32,7 @@ import { uuid } from './id';
 import { toasts } from './toast.svelte';
 import { ui } from './ui.svelte';
 import { preparePhoto, PhotoError } from './image';
-import { formatQuantity, parseEntry } from '$lib/shared/quantity';
+import { parseEntry } from '$lib/shared/quantity';
 import { cleanName, MAX_NOTE_LENGTH, nameKey } from '$lib/shared/text';
 import { guessCategory } from '$lib/shared/categorize';
 import {
@@ -49,6 +49,17 @@ import {
 	type EntryPlan
 } from '$lib/shared/planning';
 import { DAY } from '$lib/shared/stats';
+import {
+	DEFAULT_LANGUAGE,
+	LANGUAGE_NAMES,
+	isLanguage,
+	messagesFor,
+	seededCategoryName,
+	seededListName,
+	type Language
+} from '$lib/shared/i18n';
+import { bindLanguage, m, qty } from './i18n';
+import { formatWeekday } from './format';
 
 const LS = {
 	list: '8star.list',
@@ -61,7 +72,9 @@ const LS = {
 	deviceName: '8star.deviceName',
 	wakeLock: '8star.wakeLock',
 	shareRound: '8star.shareRound',
-	shopping: '8star.shopping'
+	shopping: '8star.shopping',
+	/** Last known household language, so the loading screen is not in the wrong language. */
+	language: '8star.language'
 };
 
 /** Presence heartbeat while in winkelstand. */
@@ -116,6 +129,8 @@ export interface ShoppingSession {
 
 class AppState {
 	view = $state.raw<Snapshot | null>(null);
+	/** Language from the last snapshot this device saw (until the first snapshot is loaded). */
+	private cachedLanguage = $state<Language>(DEFAULT_LANGUAGE);
 	status = $state.raw<SyncStatus>({
 		connection: 'connecting',
 		syncing: false,
@@ -178,6 +193,8 @@ class AppState {
 	);
 	/** Household-wide switch (Beheer → Functies): off hides every AI feature, data is kept. */
 	aiEnabled = $derived(this.view?.settings.aiEnabled ?? true);
+	/** Household-wide UI language (Beheer → Functies). */
+	language = $derived<Language>(this.view?.settings.language ?? this.cachedLanguage);
 	/** Open recommendations imported from an external AI tool (separate from local predictions). */
 	aiRecommendations = $derived<AiRecommendation[]>(this.view?.aiRecommendations ?? []);
 	bundles = $derived<Bundle[]>(this.view?.bundles ?? []);
@@ -190,9 +207,15 @@ class AppState {
 	);
 	inShopping = $derived(!!this.shopping && this.shopping.listId === this.listId);
 
+	constructor() {
+		bindLanguage(() => this.language);
+	}
+
 	start() {
 		if (this.started || typeof window === 'undefined') return;
 		this.started = true;
+		const cached = lsGet<unknown>(LS.language, DEFAULT_LANGUAGE);
+		this.cachedLanguage = isLanguage(cached) ? cached : DEFAULT_LANGUAGE;
 		this.selectedListId = lsGet(LS.list, 'default');
 		this.sort = lsGet<SortMode>(LS.sort, 'newest');
 		if (!['newest', 'oldest', 'az'].includes(this.sort)) this.sort = 'newest';
@@ -214,20 +237,19 @@ class AppState {
 			EventSource: window.EventSource
 		});
 		engine.onChange = () => {
-			this.view = engine.view;
+			this.view = localiseSeeded(engine.view);
+			const lang = engine.view?.settings.language;
+			if (lang && lang !== this.cachedLanguage) {
+				this.cachedLanguage = lang;
+				lsSet(LS.language, lang);
+			}
 			this.status = { ...engine.status };
 			this.issues = engine.issues;
 			if (engine.status.ready) this.migrateLocalSnoozes();
 		};
 		engine.onResult = (op, result) => this.onResult(op, result);
 		engine.onDatasetReplaced = () =>
-			toasts.show(
-				'De gegevens zijn vervangen door een import of herstel. Je lijst is bijgewerkt.',
-				{
-					kind: 'warn',
-					duration: 7000
-				}
-			);
+			toasts.show(m.toast.datasetReplaced, { kind: 'warn', duration: 7000 });
 		this.engine = engine;
 		void engine.start();
 
@@ -252,7 +274,7 @@ class AppState {
 			this.setShopping({ ...this.shopping, roundId: result.roundId });
 		}
 		if (result.status === 'rejected') {
-			toasts.show(result.message ?? 'Wijziging kon niet worden verwerkt.', {
+			toasts.show(result.message ?? m.toast.opFailed, {
 				kind: 'error',
 				duration: 6000
 			});
@@ -278,11 +300,10 @@ class AppState {
 			kind: 'success',
 			secondary,
 			action: {
-				label: 'Ongedaan maken',
+				label: m.common.undo,
 				run: () => {
 					const outcome = this.engine?.undo(op.id);
-					if (outcome === 'unavailable')
-						toasts.show('Ongedaan maken is niet meer mogelijk.', { kind: 'warn' });
+					if (outcome === 'unavailable') toasts.show(m.common.undoUnavailable, { kind: 'warn' });
 					else toasts.dismiss();
 				}
 			}
@@ -331,11 +352,14 @@ class AppState {
 	setAiEnabled(on: boolean) {
 		if (on === this.aiEnabled) return;
 		this.run({ type: 'settings.update', aiEnabled: on });
-		toasts.show(
-			on
-				? 'AI-functies staan aan op alle apparaten'
-				: 'AI-functies verborgen op alle apparaten. Er is niets verwijderd.'
-		);
+		toasts.show(on ? m.toast.aiOn : m.toast.aiOff);
+	}
+
+	/** Shared with every device; the confirmation is shown in the new language. */
+	setLanguage(language: Language) {
+		if (language === this.language) return;
+		this.run({ type: 'settings.update', language });
+		toasts.show(messagesFor(language).toast.languageChanged(LANGUAGE_NAMES[language]));
 	}
 
 	// --------------------------------------------------------------- lookups
@@ -354,6 +378,15 @@ class AppState {
 
 	itemFor(productId: string, listId = this.listId): Item | undefined {
 		return this.view?.items.find((i) => i.productId === productId && i.listId === listId);
+	}
+
+	/**
+	 * A list name from server history (stored as typed): the untouched seeded list name is shown
+	 * in the household language, like everywhere else.
+	 */
+	historyListName(name: string): string {
+		const raw = this.engine?.view?.lists.find((l) => l.name === name);
+		return raw ? (this.list(raw.id)?.name ?? name) : name;
 	}
 
 	aliasesFor(productId: string) {
@@ -448,15 +481,15 @@ class AppState {
 		haptic();
 		const usual =
 			!plan.explicit && plan.quantity !== null && plan.product?.defaultQuantity != null
-				? formatQuantity(plan.quantity, plan.unit)
+				? qty(plan.quantity, plan.unit)
 				: '';
-		const label = usual ? `“${plan.name}” (${usual})` : `“${plan.name}”`;
+		const label = m.common.quote(plan.name) + (usual ? ` (${usual})` : '');
 		if (listId !== this.listId) {
-			this.undoable(op, `${label} toegevoegd aan ${this.list(listId)?.name ?? 'lijst'}`);
+			this.undoable(op, m.toast.addedTo(label, this.list(listId)?.name ?? m.common.list));
 		} else if (existing) {
-			this.undoable(op, `${label} staat weer op de lijst`);
+			this.undoable(op, m.toast.backOnList(label));
 		} else if (usual) {
-			this.undoable(op, `${label} toegevoegd met het gebruikelijke aantal`);
+			this.undoable(op, m.toast.addedUsual(label));
 		}
 		this.highlight(itemId);
 		return { kind: existing ? 'reactivated' : 'added', itemId };
@@ -464,16 +497,16 @@ class AppState {
 
 	/** "1 extra": atomic server-side increment, so two devices adding at once both count. */
 	addExtra(item: Item, delta: number, unit: string | null) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		haptic();
 		const op = this.run({ type: 'item.increment', itemId: item.id, delta, unit });
 		this.highlight(item.id);
-		this.undoable(op, `“${name}”: ${formatQuantity(delta, unit)} extra`);
+		this.undoable(op, m.toast.extra(name, qty(delta, unit)));
 	}
 
 	/** "Wijzigen naar …": explicit new quantity. */
 	setQuantity(item: Item, quantity: number | null, unit: string | null) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		const op = this.run({
 			type: 'item.update',
 			itemId: item.id,
@@ -481,10 +514,7 @@ class AppState {
 			base: { quantity: item.quantity, unit: item.unit }
 		});
 		this.highlight(item.id);
-		this.undoable(
-			op,
-			`“${name}” gewijzigd naar ${formatQuantity(quantity, unit) || 'geen aantal'}`
-		);
+		this.undoable(op, m.toast.changedTo(name, qty(quantity, unit) || m.toast.noQuantity));
 	}
 
 	highlight(itemId: string) {
@@ -517,11 +547,11 @@ class AppState {
 		haptic();
 		const op = this.run({ type: 'items.addMany', listId, entries: full });
 		const parts = [
-			count.add ? `${count.add} toegevoegd` : '',
-			count.extra ? `${count.extra} verhoogd` : '',
-			count.set ? `${count.set} aangepast` : ''
+			count.add ? m.toast.manyAdded(count.add) : '',
+			count.extra ? m.toast.manyIncreased(count.extra) : '',
+			count.set ? m.toast.manyChanged(count.set) : ''
 		].filter(Boolean);
-		this.undoable(op, `${this.list(listId)?.name ?? 'Lijst'}: ${parts.join(', ')}`);
+		this.undoable(op, `${this.list(listId)?.name ?? m.toast.listFallback}: ${parts.join(', ')}`);
 		return true;
 	}
 
@@ -529,7 +559,7 @@ class AppState {
 
 	toggle(item: Item) {
 		const product = this.product(item.productId);
-		const name = product?.name ?? 'Item';
+		const name = product?.name ?? m.common.item;
 		haptic();
 		if (item.status === 'active') {
 			const op = this.run({ type: 'item.complete', itemId: item.id });
@@ -541,14 +571,14 @@ class AppState {
 				(product.stockStatus === 'low' || product.stockStatus === 'out');
 			this.undoable(
 				op,
-				`“${name}” afgevinkt`,
+				m.toast.ticked(name),
 				offerStock
-					? { label: 'Voorraad op genoeg', run: () => this.setStock(product, 'enough') }
+					? { label: m.toast.stockEnough, run: () => this.setStock(product, 'enough') }
 					: undefined
 			);
 		} else {
 			const op = this.run({ type: 'item.reactivate', itemId: item.id });
-			this.undoable(op, `“${name}” staat weer op de lijst`);
+			this.undoable(op, m.toast.backOnList(m.common.quote(name)));
 		}
 	}
 
@@ -577,7 +607,7 @@ class AppState {
 
 	/** "Deels gehaald": records what was bought, the rest stays on the list. */
 	purchasePartial(item: Item, quantity: number) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		if (item.quantity === null || quantity <= 0) return;
 		if (quantity >= item.quantity) {
 			this.toggle(item);
@@ -591,24 +621,18 @@ class AppState {
 			unit: item.unit
 		});
 		const left = Math.round((item.quantity - quantity) * 1000) / 1000;
-		this.undoable(
-			op,
-			`“${name}”: ${formatQuantity(quantity, item.unit)} gehaald, ${formatQuantity(left, item.unit)} blijft op de lijst`
-		);
+		this.undoable(op, m.toast.partial(name, qty(quantity, item.unit), qty(left, item.unit)));
 	}
 
 	setUnavailable(item: Item, unavailable: boolean) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		const op = this.run({ type: 'item.setUnavailable', itemId: item.id, unavailable });
-		this.undoable(
-			op,
-			unavailable ? `“${name}” niet verkrijgbaar: blijft nodig` : `“${name}” weer te halen`
-		);
+		this.undoable(op, unavailable ? m.toast.unavailable(name) : m.toast.availableAgain(name));
 	}
 
 	retryUnavailable(listId = this.listId) {
 		const op = this.run({ type: 'list.retryUnavailable', listId });
-		this.undoable(op, 'Niet verkrijgbare producten staan weer bij te halen');
+		this.undoable(op, m.toast.retryUnavailable);
 	}
 
 	claim(item: Item) {
@@ -625,16 +649,16 @@ class AppState {
 	}
 
 	deleteItem(item: Item) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		const op = this.run({ type: 'item.delete', itemId: item.id });
-		this.undoable(op, `“${name}” verwijderd`);
+		this.undoable(op, m.toast.deleted(name));
 	}
 
 	moveItem(item: Item, toListId: string) {
-		const name = this.product(item.productId)?.name ?? 'Item';
+		const name = this.product(item.productId)?.name ?? m.common.item;
 		const list = this.list(toListId);
 		const op = this.run({ type: 'item.move', itemId: item.id, toListId });
-		this.undoable(op, `“${name}” verplaatst naar ${list?.name ?? 'andere lijst'}`);
+		this.undoable(op, m.toast.moved(name, list?.name ?? m.common.otherList));
 	}
 
 	reorderItems(listId: string, itemIds: string[]) {
@@ -643,7 +667,7 @@ class AppState {
 
 	clearCompleted(listId = this.listId) {
 		const op = this.run({ type: 'list.clearCompleted', listId });
-		this.undoable(op, 'Afgevinkte items gewist');
+		this.undoable(op, m.toast.clearedCompleted);
 	}
 
 	// --------------------------------------------------------------- products
@@ -660,7 +684,7 @@ class AppState {
 					this.view?.products.some((p) => p.id !== product.id && nameKey(p.name) === key) ||
 					this.view?.aliases.some((a) => a.productId !== product.id && nameKey(a.alias) === key);
 				if (clash) {
-					toasts.show(`De naam “${name}” is al in gebruik.`, { kind: 'error' });
+					toasts.show(m.toast.nameInUse(name), { kind: 'error' });
 					return false;
 				}
 				effective.name = name;
@@ -695,13 +719,13 @@ class AppState {
 	toggleFavorite(product: Product) {
 		this.updateProduct(product, { favorite: !product.favorite });
 		toasts.show(
-			product.favorite ? `“${product.name}” is geen favoriet meer` : `“${product.name}” is favoriet`
+			product.favorite ? m.toast.unfavorited(product.name) : m.toast.favorited(product.name)
 		);
 	}
 
 	deleteProduct(product: Product) {
 		const op = this.run({ type: 'product.delete', productId: product.id });
-		this.undoable(op, `“${product.name}” en de geschiedenis verwijderd`);
+		this.undoable(op, m.toast.productDeleted(product.name));
 	}
 
 	/** Manual "andere naam": maps to the same product id. Never merges two products. */
@@ -715,8 +739,8 @@ class AppState {
 			const owner = byName ?? (byAlias ? this.product(byAlias.productId) : undefined);
 			toasts.show(
 				owner?.id === product.id
-					? `“${clean}” hoort al bij dit product.`
-					: `“${clean}” is al in gebruik voor “${owner?.name ?? 'een ander product'}”. Producten worden nooit automatisch samengevoegd.`,
+					? m.toast.aliasOwn(clean)
+					: m.toast.aliasTaken(clean, owner?.name ?? m.toast.anotherProduct),
 				{ kind: 'error', duration: 6000 }
 			);
 			return false;
@@ -727,19 +751,13 @@ class AppState {
 
 	removeAlias(aliasId: string) {
 		const op = this.run({ type: 'alias.remove', aliasId });
-		this.undoable(op, 'Andere naam verwijderd');
+		this.undoable(op, m.toast.aliasRemoved);
 	}
 
 	setStock(product: Product, status: StockStatus) {
 		if (product.stockStatus === status) return;
-		const labels: Record<StockStatus, string> = {
-			unknown: 'onbekend',
-			enough: 'genoeg',
-			low: 'bijna op',
-			out: 'op'
-		};
 		const op = this.run({ type: 'product.setStock', productId: product.id, status });
-		this.undoable(op, `Voorraad “${product.name}”: ${labels[status]}`);
+		this.undoable(op, m.toast.stockSet(product.name, m.toast.stockStatus[status]));
 	}
 
 	async setPhoto(product: Product, file: Blob): Promise<boolean> {
@@ -748,7 +766,7 @@ class AppState {
 		try {
 			blob = await preparePhoto(file);
 		} catch (e) {
-			toasts.show(e instanceof PhotoError ? e.message : 'Foto toevoegen is mislukt.', {
+			toasts.show(e instanceof PhotoError ? e.message : m.photo.addFailed, {
 				kind: 'error'
 			});
 			return false;
@@ -759,15 +777,15 @@ class AppState {
 		this.undoable(
 			op,
 			this.status.connection === 'online'
-				? `Foto bij “${product.name}” opgeslagen`
-				: `Foto bij “${product.name}” bewaard; wordt gedeeld zodra er verbinding is`
+				? m.toast.photoSaved(product.name)
+				: m.toast.photoQueued(product.name)
 		);
 		return true;
 	}
 
 	removePhoto(product: Product) {
 		const op = this.run({ type: 'product.setPhoto', productId: product.id, mediaId: null });
-		this.undoable(op, `Foto bij “${product.name}” verwijderd`);
+		this.undoable(op, m.toast.photoRemoved(product.name));
 	}
 
 	/** "Niet nu": shared between devices, until a clear end time. */
@@ -777,12 +795,7 @@ class AppState {
 		const span = days ?? Math.min(14, Math.max(1, Math.round((avg ?? 2) / 2)));
 		const until = Date.now() + span * DAY;
 		const op = this.run({ type: 'product.snooze', productId: p.id, until });
-		const when = new Date(until).toLocaleDateString('nl-NL', {
-			weekday: 'long',
-			day: 'numeric',
-			month: 'long'
-		});
-		this.undoable(op, `“${p.name}” niet voorstellen tot ${when}`);
+		this.undoable(op, m.toast.snoozed(p.name, formatWeekday(until)));
 	}
 
 	unsnooze(product: Product) {
@@ -816,7 +829,7 @@ class AppState {
 		if (!clean || !view) return null;
 		const id = bundleId ?? uuid();
 		if (this.bundles.some((b) => b.id !== id && nameKey(b.name) === nameKey(clean))) {
-			toasts.show(`Er bestaat al een bundel “${clean}”.`, { kind: 'error' });
+			toasts.show(m.toast.bundleExists(clean), { kind: 'error' });
 			return null;
 		}
 		const existing = this.bundles.find((b) => b.id === id);
@@ -838,14 +851,14 @@ class AppState {
 				};
 			});
 		this.run({ type: 'bundle.save', bundleId: id, name: clean, servings, lines: input });
-		toasts.show(`Bundel “${clean}” opgeslagen`, { kind: 'success' });
+		toasts.show(m.toast.bundleSaved(clean), { kind: 'success' });
 		return id;
 	}
 
 	copyBundle(bundle: Bundle): string | null {
-		let name = `${bundle.name} (kopie)`;
+		let name = m.toast.bundleCopy(bundle.name, 1);
 		for (let n = 2; this.bundles.some((b) => nameKey(b.name) === nameKey(name)); n++)
-			name = `${bundle.name} (kopie ${n})`;
+			name = m.toast.bundleCopy(bundle.name, n);
 		return this.saveBundle(
 			null,
 			name,
@@ -861,7 +874,7 @@ class AppState {
 
 	deleteBundle(bundle: Bundle) {
 		const op = this.run({ type: 'bundle.delete', bundleId: bundle.id });
-		this.undoable(op, `Bundel “${bundle.name}” verwijderd (producten en geschiedenis blijven)`);
+		this.undoable(op, m.toast.bundleDeleted(bundle.name));
 	}
 
 	// --------------------------------------------------------------- winkelstand & rounds
@@ -903,7 +916,7 @@ class AppState {
 	endRound(round: Round) {
 		this.run({ type: 'round.end', roundId: round.id, deviceId: this.deviceId });
 		if (this.shopping?.roundId === round.id) this.setShopping(null);
-		toasts.show('Winkelronde beëindigd. Er is niets afgevinkt of geboekt.');
+		toasts.show(m.toast.roundEnded);
 	}
 
 	private heartbeat() {
@@ -925,7 +938,7 @@ class AppState {
 		const clean = cleanName(name);
 		if (!clean) return null;
 		if (this.lists.some((l) => nameKey(l.name) === nameKey(clean))) {
-			toasts.show(`Er bestaat al een lijst “${clean}”.`, { kind: 'error' });
+			toasts.show(m.toast.listExists(clean), { kind: 'error' });
 			return null;
 		}
 		const listId = uuid();
@@ -937,7 +950,7 @@ class AppState {
 		const clean = cleanName(name);
 		if (!clean || clean === list.name) return;
 		if (this.lists.some((l) => l.id !== list.id && nameKey(l.name) === nameKey(clean))) {
-			toasts.show(`Er bestaat al een lijst “${clean}”.`, { kind: 'error' });
+			toasts.show(m.toast.listExists(clean), { kind: 'error' });
 			return;
 		}
 		this.run({ type: 'list.rename', listId: list.id, name: clean });
@@ -949,9 +962,7 @@ class AppState {
 		const op = this.run({ type: 'list.setKind', listId: list.id, kind });
 		this.undoable(
 			op,
-			kind === 'checklist'
-				? `“${list.name}” is nu een checklist. Afvinken telt niet meer als aankoop; de geschiedenis blijft bewaard.`
-				: `“${list.name}” is nu een boodschappenlijst. Afvinken telt vanaf nu als aankoop.`
+			kind === 'checklist' ? m.toast.nowChecklist(list.name) : m.toast.nowGrocery(list.name)
 		);
 	}
 
@@ -963,10 +974,7 @@ class AppState {
 	resetChecklist(list: List, itemIds: string[]) {
 		if (!itemIds.length) return;
 		const op = this.run({ type: 'list.resetChecklist', listId: list.id, itemIds });
-		this.undoable(
-			op,
-			`${itemIds.length === 1 ? '1 taak' : `${itemIds.length} taken`} opnieuw klaargezet`
-		);
+		this.undoable(op, m.toast.checklistReset(itemIds.length));
 	}
 
 	deleteList(list: List) {
@@ -977,7 +985,7 @@ class AppState {
 			const next = this.lists.find((l) => l.id !== list.id);
 			if (next) this.selectList(next.id);
 		}
-		toasts.show(`Lijst “${list.name}” verwijderd`);
+		toasts.show(m.toast.listDeleted(list.name));
 	}
 
 	moveListBy(list: List, delta: number) {
@@ -993,7 +1001,7 @@ class AppState {
 		const clean = cleanName(name);
 		if (!clean) return;
 		if (this.view?.categories.some((c) => nameKey(c.name) === nameKey(clean))) {
-			toasts.show(`Er bestaat al een categorie “${clean}”.`, { kind: 'error' });
+			toasts.show(m.toast.categoryExists(clean), { kind: 'error' });
 			return;
 		}
 		this.run({ type: 'category.create', categoryId: uuid(), name: clean });
@@ -1004,7 +1012,7 @@ class AppState {
 		const cat = this.view?.categories.find((c) => c.id === id);
 		if (!clean || !cat || cat.name === clean) return;
 		if (this.view?.categories.some((c) => c.id !== id && nameKey(c.name) === nameKey(clean))) {
-			toasts.show(`Er bestaat al een categorie “${clean}”.`, { kind: 'error' });
+			toasts.show(m.toast.categoryExists(clean), { kind: 'error' });
 			return;
 		}
 		this.run({ type: 'category.rename', categoryId: id, name: clean });
@@ -1013,7 +1021,7 @@ class AppState {
 	deleteCategory(id: string) {
 		const cat = this.view?.categories.find((c) => c.id === id);
 		this.run({ type: 'category.delete', categoryId: id });
-		if (cat) toasts.show(`Categorie “${cat.name}” verwijderd`);
+		if (cat) toasts.show(m.toast.categoryDeleted(cat.name));
 	}
 
 	moveCategoryBy(id: string, delta: number) {
@@ -1040,8 +1048,8 @@ class AppState {
 		this.undoable(
 			op,
 			item?.status === 'active'
-				? `“${product?.name}” stond al op de lijst — suggestie afgerond`
-				: `“${product?.name ?? 'Product'}” op de lijst gezet`
+				? m.toast.recAlreadyOnList(product?.name ?? m.common.product)
+				: m.toast.recAdded(product?.name ?? m.common.product)
 		);
 	}
 
@@ -1049,7 +1057,7 @@ class AppState {
 		const op = this.run({ type: 'ai.dismiss', recommendationId: rec.id });
 		this.undoable(
 			op,
-			`AI-suggestie voor “${this.product(rec.productId)?.name ?? 'product'}” genegeerd`
+			m.toast.recDismissed(this.product(rec.productId)?.name ?? m.toast.productFallback)
 		);
 	}
 
@@ -1068,6 +1076,29 @@ class AppState {
 	syncNow() {
 		this.engine?.nudge();
 	}
+}
+
+/**
+ * Shows the untouched seeded list and category names in the household language (see
+ * `seededListName`). Only names change; ids and everything else stay as stored.
+ */
+function localiseSeeded(view: Snapshot | null): Snapshot | null {
+	if (!view) return view;
+	const msgs = messagesFor(view.settings.language);
+	let changed = false;
+	const lists = view.lists.map((l) => {
+		const name = seededListName(l.id, l.name, msgs);
+		if (name === l.name) return l;
+		changed = true;
+		return { ...l, name };
+	});
+	const categories = view.categories.map((c) => {
+		const name = seededCategoryName(c.id, c.name, msgs);
+		if (name === c.name) return c;
+		changed = true;
+		return { ...c, name };
+	});
+	return changed ? { ...view, lists, categories } : view;
 }
 
 export const app = new AppState();

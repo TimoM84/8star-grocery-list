@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
-import { addItems, freshApp, row, waitForSync } from './helpers';
+import { addItems, freshApp, resetServer, row, waitForSync } from './helpers';
 
 test.use({ serviceWorkers: 'allow' });
 
@@ -9,11 +9,20 @@ function pngSize(buf: Buffer) {
 }
 
 test('manifest and icons meet Android install requirements', async ({ page, request }) => {
+	// A fresh install is English; the names follow the household language.
+	await resetServer(request, 'en');
 	const res = await request.get('/manifest.webmanifest');
 	expect(res.ok()).toBeTruthy();
 	const m = await res.json();
-	expect(m).toMatchObject({ display: 'standalone', start_url: '/', scope: '/', lang: 'nl' });
-	expect(m.name).toBeTruthy();
+	expect(m).toMatchObject({ display: 'standalone', start_url: '/', scope: '/', lang: 'en' });
+	expect(m.name).toBe('8star Groceries');
+	for (const language of ['nl', 'de', 'fr', 'es']) {
+		await resetServer(request, language);
+		const localised = await (await request.get('/manifest.webmanifest')).json();
+		expect(localised.lang).toBe(language);
+		expect(localised.short_name.length, language).toBeLessThanOrEqual(12);
+		expect(localised.name).not.toBe(m.name);
+	}
 	expect(m.short_name.length).toBeLessThanOrEqual(12);
 	const sizes = new Set<string>();
 	for (const icon of m.icons) {

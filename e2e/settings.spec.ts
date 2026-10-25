@@ -65,14 +65,14 @@ test('AI features can be hidden and shown again from Beheer, on every device, wi
 
 	// Persisted on the server and survives a reload.
 	const snap = await (await page.request.get('/api/snapshot')).json();
-	expect(snap.settings).toEqual({ aiEnabled: false });
+	expect(snap.settings).toEqual({ aiEnabled: false, language: 'nl' });
 	expect(snap.aiRecommendations).toHaveLength(1);
 	await page.reload();
 	await expect(page.getByTestId('export-ai-prompt')).toHaveCount(0);
 
 	// Part of the JSON export.
 	const exported = await (await page.request.get('/api/export?format=json')).json();
-	expect(exported.data.settings).toEqual({ aiEnabled: false });
+	expect(exported.data.settings).toEqual({ aiEnabled: false, language: 'nl' });
 
 	// Switching back on brings the kept suggestion back.
 	await page.goto('/beheer');

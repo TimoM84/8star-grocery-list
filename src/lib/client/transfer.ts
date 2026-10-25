@@ -7,6 +7,7 @@ import {
 	type ImportMode,
 	type ImportReport
 } from '$lib/shared/transfer';
+import { m } from './i18n';
 
 export type ImportResult = { report: ImportReport } | { failure: string };
 
@@ -17,7 +18,7 @@ export async function uploadImport(
 	preview: boolean
 ): Promise<ImportResult> {
 	if (file.size > MAX_IMPORT_BYTES)
-		return { failure: `Het bestand is groter dan ${MAX_IMPORT_BYTES / 1024 / 1024} MB.` };
+		return { failure: m.importPanel.fileTooLarge(MAX_IMPORT_BYTES / 1024 / 1024) };
 	const params = new URLSearchParams({ kind, mode });
 	if (preview) params.set('preview', '1');
 	// Not a form content type, so SvelteKit's CSRF origin check never blocks it behind a proxy.
@@ -32,9 +33,9 @@ export async function uploadImport(
 		});
 		if (res.status === 200 || res.status === 422)
 			return { report: (await res.json()) as ImportReport };
-		if (res.status === 413) return { failure: 'Het bestand is te groot voor de server.' };
-		return { failure: `De server weigerde de import (HTTP ${res.status}).` };
+		if (res.status === 413) return { failure: m.importPanel.serverTooLarge };
+		return { failure: m.importPanel.serverRefused(res.status) };
 	} catch {
-		return { failure: 'Geen verbinding met de server. Importeren kan alleen online.' };
+		return { failure: m.importPanel.offline };
 	}
 }

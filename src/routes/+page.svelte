@@ -11,6 +11,7 @@
 	import { app, type AddOutcome } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { holdWakeLock } from '$lib/client/wakelock';
+	import { m } from '$lib/client/i18n';
 	import {
 		groupByCategory,
 		itemViews,
@@ -157,8 +158,11 @@
 	);
 	const roundLabel = $derived(
 		presentOthers.length === 0
-			? 'Er loopt een winkelronde'
-			: `${presentOthers.map((p) => p.deviceName ?? 'Iemand').join(' en ')} ${presentOthers.length === 1 ? 'doet' : 'doen'} boodschappen`
+			? m.list.roundRunning
+			: m.list.roundShopping(
+					presentOthers.map((p) => p.deviceName ?? m.list.someone).join(m.common.and),
+					presentOthers.length
+				)
 	);
 	const roundUnshared = $derived(
 		shopping &&
@@ -171,10 +175,9 @@
 		const round = app.round;
 		if (!round) return;
 		const ok = await ui.confirm({
-			title: 'Winkelronde beëindigen?',
-			message:
-				'De ronde stopt voor iedereen. Er wordt niets afgevinkt of geboekt; de lijst blijft zoals hij is.',
-			confirmLabel: 'Beëindigen'
+			title: m.list.endRoundTitle,
+			message: m.list.endRoundMessage,
+			confirmLabel: m.list.endRoundConfirm
 		});
 		if (ok) app.endRound(round);
 	}
@@ -187,9 +190,9 @@
 
 	async function clearCompleted() {
 		const ok = await ui.confirm({
-			title: checklist ? 'Afgeronde taken wissen?' : 'Afgevinkte items wissen?',
-			message: `${completed.length === 1 ? '1 item verdwijnt' : `${completed.length} items verdwijnen`} van deze lijst.${checklist ? '' : ' De aankoopgeschiedenis blijft bewaard.'}`,
-			confirmLabel: 'Wissen',
+			title: checklist ? m.list.clearDoneTitle : m.list.clearTickedTitle,
+			message: m.list.clearMessage(completed.length) + (checklist ? '' : ' ' + m.list.historyKept),
+			confirmLabel: m.list.clear,
 			danger: true
 		});
 		if (ok) app.clearCompleted();
@@ -200,9 +203,12 @@
 		if (!list || !completedAll.length) return;
 		const names = completedAll.map((v) => v.product.name);
 		const ok = await ui.confirm({
-			title: 'Opnieuw klaarzetten?',
-			message: `Deze ${names.length === 1 ? 'taak gaat' : `${names.length} taken gaan`} terug naar ‘Nog te doen’: ${names.slice(0, 12).join(', ')}${names.length > 12 ? ` en ${names.length - 12} meer` : ''}. Je kunt dit ongedaan maken.`,
-			confirmLabel: 'Klaarzetten'
+			title: m.list.resetTitle,
+			message: m.list.resetMessage(
+				names.length,
+				names.slice(0, 12).join(', ') + (names.length > 12 ? m.list.andMore(names.length - 12) : '')
+			),
+			confirmLabel: m.list.resetConfirm
 		});
 		if (ok)
 			app.resetChecklist(
@@ -239,16 +245,14 @@
 	const subtitle = $derived(
 		checklist
 			? app.activeCount === 0
-				? 'Alles afgerond'
-				: `${app.activeCount} nog te doen`
+				? m.list.allDone
+				: m.list.toDoCount(app.activeCount)
 			: app.activeCount === 0
-				? 'Niets te halen'
-				: app.activeCount === 1
-					? '1 item te halen'
-					: `${app.activeCount} items te halen`
+				? m.list.nothingToGet
+				: m.list.toGetCount(app.activeCount)
 	);
-	const activeTitle = $derived(checklist ? 'Nog te doen' : 'Te halen');
-	const doneTitle = $derived(checklist ? 'Afgerond' : 'Afgevinkt');
+	const activeTitle = $derived(checklist ? m.list.toDo : m.list.toGet);
+	const doneTitle = $derived(checklist ? m.list.done : m.list.ticked);
 	const completedOpen = $derived(shopping ? shoppingCompletedOpen : app.completedOpen);
 	function setCompletedOpen(open: boolean) {
 		if (shopping) shoppingCompletedOpen = open;
@@ -256,7 +260,7 @@
 	}
 </script>
 
-<svelte:head><title>{app.currentList?.name ?? 'Boodschappen'} · 8star</title></svelte:head>
+<svelte:head><title>{app.currentList?.name ?? m.seeded.lists.default} · 8star</title></svelte:head>
 
 <svelte:window bind:innerHeight bind:innerWidth />
 
@@ -278,11 +282,7 @@
 					class="text-base leading-tight font-semibold text-accent"
 					data-testid="shopping-remaining"
 				>
-					{remaining === 0
-						? 'Alles gehaald'
-						: remaining === 1
-							? 'Nog 1 product'
-							: `Nog ${remaining} producten`}
+					{remaining === 0 ? m.list.allBought : m.list.remaining(remaining)}
 				</p>
 			</div>
 			<div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2">
@@ -290,7 +290,7 @@
 				<button
 					type="button"
 					class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent active:bg-accent-strong"
-					aria-label="Toevoegen"
+					aria-label={m.common.add}
 					aria-expanded={showAdd}
 					onclick={() => (showAdd = !showAdd)}
 					data-testid="shopping-add"
@@ -301,7 +301,7 @@
 					type="button"
 					class="min-h-12 shrink-0 rounded-2xl bg-ink px-4 text-base font-semibold text-bg"
 					onclick={() => app.exitShopping()}
-					data-testid="shopping-exit">Klaar</button
+					data-testid="shopping-exit">{m.common.done}</button
 				>
 			</div>
 		</div>
@@ -310,9 +310,11 @@
 				<p class="mt-1 flex items-center gap-1.5 text-sm text-muted" data-testid="round-status">
 					<Icon name="users" size={16} />
 					{#if roundUnshared}
-						Offline gestart: de ronde wordt gedeeld zodra er verbinding is.
+						{m.list.roundOffline}
 					{:else}
-						Samen met {presentOthers.map((p) => p.deviceName ?? 'iemand').join(', ')}
+						{m.list.together(
+							presentOthers.map((p) => p.deviceName ?? m.list.someoneLower).join(', ')
+						)}
 					{/if}
 				</p>
 			{/if}
@@ -325,7 +327,8 @@
 						onclick={() => ui.openSheet('bulk', { listId: app.listId })}
 						data-testid="bulk-open"
 					>
-						<Icon name="paste" size={18} /> Meerdere toevoegen
+						<Icon name="paste" size={18} />
+						{m.bulk.title}
 					</button>
 				</div>
 			{/if}
@@ -339,12 +342,12 @@
 			: 'relative'} pt-safe top-0 z-20 border-b border-line/60 bg-bg/95 pb-3 backdrop-blur"
 		data-sticky={sticky}
 	>
-		<PageHeader title={app.currentList?.name ?? 'Boodschappen'} {subtitle}>
+		<PageHeader title={app.currentList?.name ?? m.seeded.lists.default} {subtitle}>
 			{#if app.lists.length > 1}
 				<div
 					class="mt-1 flex flex-wrap gap-2"
 					role="radiogroup"
-					aria-label="Lijst kiezen"
+					aria-label={m.list.chooseList}
 					data-testid="list-chips"
 				>
 					{#each app.lists as l (l.id)}
@@ -402,7 +405,7 @@
 					type="button"
 					class="min-h-12 rounded-xl bg-accent px-4 font-semibold text-on-accent"
 					onclick={() => app.enterShopping()}
-					data-testid="round-join">Meedoen</button
+					data-testid="round-join">{m.list.join}</button
 				>
 			</div>
 		{/if}
@@ -414,7 +417,8 @@
 					onclick={() => app.enterShopping()}
 					data-testid="shopping-enter"
 				>
-					<Icon name="cart" size={20} /> Ik ga winkelen
+					<Icon name="cart" size={20} />
+					{m.list.goShopping}
 				</button>
 			{/if}
 			<button
@@ -425,19 +429,19 @@
 				onclick={() => ui.openSheet('bulk', { listId: app.listId })}
 				data-testid="bulk-open"
 			>
-				<Icon name="paste" size={20} class="text-accent" /> Meerdere
+				<Icon name="paste" size={20} class="text-accent" />
+				{m.list.several}
 			</button>
 		</div>
 		{#if !checklist}
-			<SortControl value={app.sort} onchange={(m) => app.setSort(m)} />
+			<SortControl value={app.sort} onchange={(mode) => app.setSort(mode)} />
 		{/if}
 	{:else}
 		{#if showTools}
 			<div class="space-y-3 rounded-2xl bg-surface-2 p-3" transition:slide={{ duration: ms(160) }}>
-				<SortControl value={app.sort} onchange={(m) => app.setSort(m)} />
+				<SortControl value={app.sort} onchange={(mode) => app.setSort(mode)} />
 				<p class="text-sm text-muted">
-					De volgorde in de winkelstand blijft staan; een nieuwe sortering geldt vanaf de volgende
-					keer.
+					{m.list.frozenHelp}
 				</p>
 				{#if app.round}
 					<button
@@ -446,7 +450,8 @@
 						onclick={endRound}
 						data-testid="round-end"
 					>
-						<Icon name="x" size={20} /> Winkelronde voor iedereen beëindigen
+						<Icon name="x" size={20} />
+						{m.list.endRoundAll}
 					</button>
 				{/if}
 			</div>
@@ -459,11 +464,8 @@
 				data-testid="new-items-banner"
 			>
 				<Icon name="plus" size={20} />
-				<span class="flex-1"
-					>{waitingNew.length === 1 ? '1 nieuw product' : `${waitingNew.length} nieuwe producten`} op
-					de lijst</span
-				>
-				<span class="underline">Bekijken</span>
+				<span class="flex-1">{m.list.newItems(waitingNew.length)}</span>
+				<span class="underline">{m.list.view}</span>
 			</button>
 		{/if}
 	{/if}
@@ -476,10 +478,11 @@
 		>
 			<div class="mb-2 flex items-center gap-2">
 				<Icon name="sparkles" size={18} class="text-accent" />
-				<h2 id="maybe-title" class="flex-1 text-sm font-semibold text-accent">Misschien nodig</h2>
+				<h2 id="maybe-title" class="flex-1 text-sm font-semibold text-accent">{m.list.maybe}</h2>
 				<a
 					href="/suggesties"
-					class="-my-2 flex min-h-12 items-center px-2 text-sm font-semibold text-accent">Alles</a
+					class="-my-2 flex min-h-12 min-w-12 items-center justify-center px-2 text-sm font-semibold text-accent"
+					>{m.list.all}</a
 				>
 			</div>
 			<div class="flex flex-wrap gap-2">
@@ -513,7 +516,8 @@
 					onclick={() => (reordering = !reordering)}
 					data-testid="reorder-toggle"
 				>
-					<Icon name="arrowDown" size={16} /> Volgorde
+					<Icon name="arrowDown" size={16} />
+					{m.list.order}
 				</button>
 			{:else}
 				{#if shopping}
@@ -526,7 +530,8 @@
 						onclick={() => (showTools = !showTools)}
 						data-testid="shopping-tools"
 					>
-						<Icon name="settings" size={16} /> Weergave
+						<Icon name="settings" size={16} />
+						{m.list.display}
 					</button>
 				{/if}
 				<button
@@ -538,7 +543,8 @@
 					onclick={() => app.setGroupByCategory(!app.groupByCategory)}
 					data-testid="group-toggle"
 				>
-					<Icon name="tag" size={16} /> Per categorie
+					<Icon name="tag" size={16} />
+					{m.list.byCategory}
 				</button>
 			{/if}
 		</div>
@@ -550,16 +556,14 @@
 				data-testid="empty-state"
 			>
 				{#if checklist}
-					<p class="text-lg font-semibold">Alles afgerond!</p>
-					<p class="mt-1 text-muted">
-						Zet de lijst opnieuw klaar of typ hierboven een nieuwe taak.
-					</p>
+					<p class="text-lg font-semibold">{m.list.emptyChecklist}</p>
+					<p class="mt-1 text-muted">{m.list.emptyChecklistHelp}</p>
 				{:else if shopping}
-					<p class="text-lg font-semibold">Alles gehaald!</p>
-					<p class="mt-1 text-muted">Tik op Klaar om de winkelstand te verlaten.</p>
+					<p class="text-lg font-semibold">{m.list.emptyShopping}</p>
+					<p class="mt-1 text-muted">{m.list.emptyShoppingHelp}</p>
 				{:else}
-					<p class="text-lg font-semibold">Alles in huis!</p>
-					<p class="mt-1 text-muted">Typ hierboven wat er op de lijst moet.</p>
+					<p class="text-lg font-semibold">{m.list.empty}</p>
+					<p class="mt-1 text-muted">{m.list.emptyHelp}</p>
 				{/if}
 			</div>
 		{:else if groups && !checklist}
@@ -567,7 +571,7 @@
 				{#each groups as g (g.category?.id ?? 'none')}
 					<div data-testid="category-group">
 						<h3 class="mb-1.5 px-1 text-sm font-bold tracking-wide text-faint uppercase">
-							{g.category?.name ?? 'Overig'}
+							{g.category?.name ?? m.list.other}
 						</h3>
 						<ul class="space-y-2">
 							{#each g.items as v (v.item.id)}
@@ -595,7 +599,7 @@
 							<button
 								type="button"
 								class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-surface-2 disabled:opacity-30"
-								aria-label="{v.product.name} omhoog"
+								aria-label={m.ordered.up(v.product.name)}
 								disabled={i === 0}
 								onclick={() => moveBy(v, -1)}
 								data-testid="move-up"><Icon name="arrowUp" size={20} /></button
@@ -603,7 +607,7 @@
 							<button
 								type="button"
 								class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-surface-2 disabled:opacity-30"
-								aria-label="{v.product.name} omlaag"
+								aria-label={m.ordered.down(v.product.name)}
 								disabled={i === active.length - 1}
 								onclick={() => moveBy(v, 1)}
 								data-testid="move-down"><Icon name="arrowDown" size={20} /></button
@@ -623,7 +627,8 @@
 					(frozen = frozen?.filter((id) => byId.get(id)?.item.status !== 'completed') ?? null)}
 				data-testid="tidy-ticked"
 			>
-				<Icon name="check" size={18} /> Afgevinkte inklappen ({tickedInPlace.length})
+				<Icon name="check" size={18} />
+				{m.list.tidy(tickedInPlace.length)}
 			</button>
 		{/if}
 	</section>
@@ -632,16 +637,16 @@
 		<section aria-labelledby="unavailable-title" data-testid="unavailable-section">
 			<div class="mb-2 flex items-center gap-2">
 				<h2 id="unavailable-title" class="flex-1 text-base font-semibold text-warn">
-					Niet verkrijgbaar <span class="text-faint">· {unavailable.length}</span>
+					{m.itemRow.unavailable} <span class="text-faint">· {unavailable.length}</span>
 				</h2>
 				<button
 					type="button"
 					class="min-h-12 rounded-full px-3 text-sm font-semibold text-accent active:bg-surface-2"
 					onclick={() => app.retryUnavailable()}
-					data-testid="retry-unavailable">Opnieuw proberen</button
+					data-testid="retry-unavailable">{m.list.retry}</button
 				>
 			</div>
-			<p class="mb-2 text-sm text-muted">Nog nodig, niet gekocht. Blijft op de lijst.</p>
+			<p class="mb-2 text-sm text-muted">{m.list.unavailableHelp}</p>
 			<ul class="space-y-2">
 				{#each unavailable as v (v.item.id)}
 					<li transition:slide={{ duration: ms(180) }}>{@render row(v, false)}</li>
@@ -682,7 +687,8 @@
 								onclick={resetChecklist}
 								data-testid="reset-checklist"
 							>
-								<Icon name="refresh" size={18} /> Opnieuw klaarzetten
+								<Icon name="refresh" size={18} />
+								{m.list.reset}
 							</button>
 						{/if}
 						<button
@@ -692,7 +698,7 @@
 							data-testid="clear-completed"
 						>
 							<Icon name="trash" size={18} />
-							{checklist ? 'Afgeronde taken wissen' : 'Afgevinkte items wissen'}
+							{checklist ? m.list.clearDone : m.list.clearTicked}
 						</button>
 					{/if}
 				</div>

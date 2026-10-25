@@ -10,7 +10,8 @@ import {
 	type CsvDataset
 } from '$lib/server/export';
 import { exportData } from '$lib/server/transfer/format';
-import { AI_PROMPT } from '$lib/server/transfer/ai-prompt';
+import { aiPrompt } from '$lib/server/transfer/ai-prompt';
+import { readSettings } from '$lib/server/settings';
 
 export const GET: RequestHandler = ({ url }) => {
 	const { db, media } = getRuntime();
@@ -52,7 +53,11 @@ export const GET: RequestHandler = ({ url }) => {
 		);
 	}
 	if (format === 'ai-prompt') {
-		return download(AI_PROMPT, 'text/markdown; charset=utf-8', '8star-ai-opdracht.md');
+		return download(
+			aiPrompt(readSettings(db).language),
+			'text/markdown; charset=utf-8',
+			'8star-ai-opdracht.md'
+		);
 	}
 	error(400, 'Unknown format');
 };

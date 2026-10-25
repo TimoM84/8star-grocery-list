@@ -51,7 +51,67 @@ const UNIT_ALIASES: Record<string, Unit> = {
 	dozen: 'doos',
 	pot: 'pot',
 	potten: 'pot',
-	potje: 'pot'
+	potje: 'pot',
+	// The translated unit names (see i18n `units`), so a shown quantity can be typed back.
+	pc: 'stuks',
+	pcs: 'stuks',
+	piece: 'stuks',
+	pieces: 'stuks',
+	pack: 'pak',
+	packs: 'pak',
+	bottle: 'fles',
+	bottles: 'fles',
+	can: 'blik',
+	cans: 'blik',
+	bag: 'zak',
+	bags: 'zak',
+	bunch: 'bos',
+	box: 'doos',
+	boxes: 'doos',
+	jar: 'pot',
+	jars: 'pot',
+	stück: 'stuks',
+	'stk.': 'stuks',
+	stk: 'stuks',
+	packung: 'pak',
+	packungen: 'pak',
+	flasche: 'fles',
+	flaschen: 'fles',
+	dose: 'blik',
+	dosen: 'blik',
+	beutel: 'zak',
+	bund: 'bos',
+	schachtel: 'doos',
+	glas: 'pot',
+	gläser: 'pot',
+	pièce: 'stuks',
+	pièces: 'stuks',
+	paquet: 'pak',
+	paquets: 'pak',
+	bouteille: 'fles',
+	bouteilles: 'fles',
+	boîte: 'blik',
+	boîtes: 'blik',
+	sachet: 'zak',
+	sachets: 'zak',
+	botte: 'bos',
+	carton: 'doos',
+	ud: 'stuks',
+	uds: 'stuks',
+	'uds.': 'stuks',
+	paquete: 'pak',
+	paquetes: 'pak',
+	botella: 'fles',
+	botellas: 'fles',
+	lata: 'blik',
+	latas: 'blik',
+	bolsa: 'zak',
+	bolsas: 'zak',
+	manojo: 'bos',
+	caja: 'doos',
+	cajas: 'doos',
+	tarro: 'pot',
+	tarros: 'pot'
 };
 
 export interface ParsedEntry {
@@ -81,7 +141,7 @@ export function normaliseUnit(raw: string | null | undefined): Unit | null {
 export function parseEntry(input: string): ParsedEntry {
 	const text = input.replace(/\s+/g, ' ').trim();
 
-	const leading = /^(\d+(?:[.,]\d+)?)\s*([a-zA-Z.]+)?\s+(.+)$/.exec(text);
+	const leading = /^(\d+(?:[.,]\d+)?)\s*([\p{L}.]+)?\s+(.+)$/u.exec(text);
 	if (leading) {
 		const quantity = toNumber(leading[1]);
 		const unitRaw = leading[2];
@@ -104,16 +164,33 @@ export function parseEntry(input: string): ParsedEntry {
 	return { name: text, quantity: null, unit: null };
 }
 
-export function formatQuantity(quantity: number | null, unit: string | null): string {
+export interface QuantityFormat {
+	/** Display names per stored unit (translations); missing units are shown as stored. */
+	units?: Readonly<Record<string, string>>;
+	/** Plural display names, used for any quantity other than 1. */
+	unitsPlural?: Readonly<Record<string, string>>;
+	/** Decimal separator, "," by default. */
+	decimal?: string;
+}
+
+export function formatQuantity(
+	quantity: number | null,
+	unit: string | null,
+	format: QuantityFormat = {}
+): string {
 	if (quantity === null && !unit) return '';
 	const q =
 		quantity === null
 			? ''
 			: Number.isInteger(quantity)
 				? String(quantity)
-				: String(quantity).replace('.', ',');
+				: String(quantity).replace('.', format.decimal ?? ',');
 	if (!unit) return quantity === null ? '' : `${q}×`;
-	return q ? `${q} ${unit}` : unit;
+	const label =
+		(quantity !== null && quantity !== 1 ? format.unitsPlural?.[unit] : undefined) ??
+		format.units?.[unit] ??
+		unit;
+	return q ? `${q} ${label}` : label;
 }
 
 /** Sensible step for the quantity stepper given the unit. */

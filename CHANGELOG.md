@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.4.0
+
+The app speaks five languages, and publishing a release is one button.
+
+### Added
+
+- **Language choice** in Beheer → Features (Settings → Features in English): **English**
+  (default), **Nederlands**, **Deutsch**, **Français** and **Español**. One choice for the whole
+  household, like the AI switch: stored on the server (`setting.language` in `meta`, no schema
+  change), applied live on every device through `settings.update` (sync protocol 4), works
+  offline, and part of the JSON export and backup (`data.settings.language`; **Alles
+  vervangen**/**Replace everything** restores it, **Merge** leaves it and says so).
+- Everything follows the language: all screens, toasts and confirmations, dates and numbers
+  (decimal point in English), the server's rejection and conflict messages, import previews and
+  reports, the PWA manifest (name, shortcuts, `lang`), the page title and `lang` attribute, and
+  the AI prompt (explanations are asked for in the household language).
+- Typed names never change. The list and categories seeded on a fresh install are shown
+  translated while they keep their original name. Units are stored as before and shown
+  translated (`2 bottles`, `2 Flaschen`, `2 botellas`); typing understands the unit words of all
+  five languages (`2 bottles cola`, `1 paquet riz`).
+- **Release workflow** (Actions → Release → Run workflow → version): checks the version against
+  `package.json`, `package-lock.json`, `Dockerfile`, `compose.yaml`, `.env.example` and this
+  changelog, waits until CI passed for exactly the commit of the default branch, refuses
+  existing tags and releases, then creates the annotated tag and the GitHub Release with these
+  notes. It reuses `scripts/release.sh` (now with `--yes` and `--wait-for-ci`), uses only
+  `GITHUB_TOKEN` with `contents: write` and `checks: read`, and runs one release at a time.
+- `deploy/dockhand-compose.yaml`: the Dockhand stack with one required `APP_VERSION` for the Git
+  tag that is built, the image tag and the build argument.
+
+### Changed
+
+- **English is the default language**, also after upgrading: Dutch households choose
+  **Nederlands** once in Settings → Features. CSV and backup file formats are unchanged (Dutch
+  CSV column names; the importer also accepts the English ones).
+- `compose.yaml` builds the Git tag `v${APP_VERSION}` from GitHub instead of the checked-out
+  branch, so `APP_VERSION` alone decides what runs. The image build stops when `APP_VERSION`
+  and the source's `package.json` disagree.
+
+### Tests
+
+- New: every dictionary has the same messages with the same parameters as English; language
+  switch, live update on a second device, server messages, manifest and HTML shell per
+  language; a layout audit (no overflow or clipping) of all main screens, winkelstand and the
+  action sheet in all five languages at 320 and 390 px; version consistency; the Release
+  workflow's permissions and inputs; `release.sh --yes/--wait-for-ci`. Existing tests that check
+  Dutch wording now set the household to Dutch.
+- Docker: built from the Git tag `v1.3.0`, built locally as 1.4.0, refused a mismatching
+  `APP_VERSION`, refused an unreleased tag, and upgraded a Compose stack 1.3.0 → 1.4.0 by only
+  changing `APP_VERSION`. The Release workflow itself has not run yet (it can only run on the
+  default branch after merging). Not tested on a physical phone.
+
 ## 1.3.0
 
 ### Added

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openDatabase, schemaVersion, latestSchemaVersion } from '$lib/server/db';
 import { GroceryStore } from '$lib/server/store';
+import { writeSettings } from '$lib/server/settings';
 import type { Op, OpPayload } from '$lib/shared/ops';
 import { computeStats, DAY } from '$lib/shared/stats';
 
@@ -12,6 +13,8 @@ const uid = (p = 'id') => `${p}-${++n}-${Math.random().toString(36).slice(2, 8)}
 
 function setup() {
 	const db = openDatabase(':memory:');
+	// These tests check the Dutch wording; the household language decides it.
+	writeSettings(db, { language: 'nl' });
 	const store = new GroceryStore(db);
 	let clock = Date.UTC(2026, 0, 1, 12);
 	const apply = (payload: OpPayload, opts: { id?: string; at?: number } = {}) => {

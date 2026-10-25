@@ -4,6 +4,13 @@ This guide deploys 8star Grocery List as a **Git-based Compose stack** in
 [Dockhand](https://github.com/Finsys/dockhand). The app is reachable **only** on your private
 network or VPN; nothing is exposed publicly.
 
+**The Compose for this household's stack** is [`deploy/dockhand-compose.yaml`](../deploy/dockhand-compose.yaml)
+(`192.168.2.229:3008`, accent `#2563EB`, volume `8star-grocery-data`). Paste it into the stack
+and add the stack variable `APP_VERSION` (e.g. `1.4.0`). That one variable picks the Git tag that
+is built (`v<APP_VERSION>`), the image tag and the build argument; updating is: release → change
+`APP_VERSION` → **Pull & redeploy** ([RELEASE.md](RELEASE.md)). The rest of this guide describes
+the generic, variable-driven `compose.yaml`, which works the same way.
+
 > Dockhand's menu labels differ slightly between versions. The steps follow its Git stack
 > workflow: clone the repository, load the env file and stack variables, then run
 > `docker compose up` on `compose.yaml`. If a label differs in your version, look for the
@@ -29,8 +36,9 @@ network or VPN; nothing is exposed publicly.
 
 1. In Dockhand, open **Git repositories** (under Settings or Stacks, depending on the version) and
    add `https://github.com/TimoM84/8star-grocery-list`.
-2. The repository is private: add a GitHub fine-grained personal access token with **read-only
-   Contents** access to this repository.
+2. The repository is public, so no token is needed. (If you make it private, add a fine-grained
+   token with read-only Contents access here; the image build also fetches the Git tag from
+   GitHub, which then needs the same access on the Docker host.)
 3. Branch: `claude/8star-grocery-list-v1-ks9kyj`. If you later rename the default branch (for
    example to `main`), change it here as well.
 
@@ -53,14 +61,14 @@ network or VPN; nothing is exposed publicly.
    | `BACKUP_INTERVAL_HOURS` | `24`                       | Automatic backups (0 = off)                                                  |
    | `BACKUP_KEEP`           | `14`                       | Automatic backups kept                                                       |
    | `DATA_VOLUME`           | `8star-grocery-data`       | Docker volume with the database — **never change it on an existing install** |
-   | `APP_VERSION`           | `1.2.0`                    | Image tag (`8star-grocery-list:<version>`)                                   |
+   | `APP_VERSION`           | `1.4.0`                    | Release to run: builds Git tag `v<version>`, tags the image, sets the label  |
 
    ⚠️ Never set `BIND_ADDRESS` to `0.0.0.0` on a host that has a public interface, and never add
    a port forward on your router. The app has no login by design.
 
 4. **Deploy.** Dockhand runs `docker compose up`. Because the compose file uses
-   `pull_policy: build`, the image is built from the checked-out source on every deploy (1–3
-   minutes the first time).
+   `pull_policy: build`, the image is built on every deploy from the Git tag `v<APP_VERSION>` on
+   GitHub (not from the checked-out branch), 1–3 minutes the first time.
 5. Wait until the container shows **healthy** (healthcheck on `/api/health`).
 6. Open `http://<BIND_ADDRESS>:<HOST_PORT>` from a device on the LAN or VPN.
 
@@ -124,12 +132,12 @@ Releases are merged into the deployed branch and tagged (see [RELEASE.md](RELEAS
 1. **Optional safety backup** (the app also makes one automatically before any schema change):
    Beheer → Gegevens → _Back-up op server maken_, or
    `docker compose -p 8star-grocery exec app node scripts/backup.mjs`.
-2. In Dockhand, open the stack and choose **Pull & redeploy** (or **Redeploy**). Dockhand pulls
-   the branch, builds `8star-grocery-list:<APP_VERSION>` and recreates the container. The volume
-   `8star-grocery-data` is kept.
-   - If you pinned `APP_VERSION` in the stack variables, set it to `1.2.0` first (the compose
-     default already is `1.2.0`).
+2. In Dockhand, set the stack variable `APP_VERSION` to the new release (e.g. `1.4.0`) and choose
+   **Pull & redeploy**. Dockhand builds the Git tag `v1.4.0` as `8star-grocery-list:1.4.0` and
+   recreates the container. The volume `8star-grocery-data` is kept.
    - Keep `DATA_VOLUME` unchanged. No new variables are needed.
+   - v1.4.0 makes **English** the default language: choose **Nederlands** once in Settings →
+     Features; it applies to every phone.
 3. On first start the app migrates the database (v1.2.0: schema 3 → 4, which adds list types,
    product memory, notes, photos, bundles, stock and shopping rounds; v1.1.0 did 2 → 3).
    Beforehand it writes `/data/backups/grocery-<time>-pre-migration-v3.db`. The log shows
@@ -151,7 +159,7 @@ v1.1.0, in this order:
 
 1. Make a full backup (ZIP) first if you want to keep changes made after the upgrade. Data that
    only v1.2 knows (photos, bundles, notes, stock, aliases) cannot be used by v1.1.
-2. Redeploy the old version (`APP_VERSION=1.1.0`, code of tag `v1.1.0`). The container keeps
+2. Redeploy the old version (`APP_VERSION=1.1.0`, which builds tag `v1.1.0`). The container keeps
    restarting because the database is schema v4; that is expected and harmless.
 3. Restore the `pre-migration-v3` backup with `sh scripts/restore.sh <file>` (§9). It runs with the
    v1.1.0 image and starts the app on the restored database.
@@ -163,10 +171,11 @@ again. Photo files in `/data/media` are left alone by a rollback; v1.1 ignores t
 
 ```sh
 # on a machine with internet, same CPU architecture as the server
-docker build --build-arg APP_VERSION=1.2.0 -t 8star-grocery-list:1.2.0 .
-docker save 8star-grocery-list:1.2.0 | gzip > 8star-grocery-list-1.2.0.tar.gz
+git checkout v1.4.0
+docker build --build-arg APP_VERSION=1.4.0 -t 8star-grocery-list:1.4.0 .
+docker save 8star-grocery-list:1.4.0 | gzip > 8star-grocery-list-1.4.0.tar.gz
 # on the server
-gunzip -c 8star-grocery-list-1.2.0.tar.gz | docker load
+gunzip -c 8star-grocery-list-1.4.0.tar.gz | docker load
 ```
 
 Then deploy with `docker compose up -d --no-build`, or remove `build:`/`pull_policy:` from a copy

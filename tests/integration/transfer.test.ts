@@ -5,6 +5,7 @@ import path from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { openDatabase } from '$lib/server/db';
 import { GroceryStore } from '$lib/server/store';
+import { writeSettings } from '$lib/server/settings';
 import { buildExport, exportData } from '$lib/server/transfer/format';
 import { runImport, type ImportKind, type ImportMode } from '$lib/server/transfer/importer';
 import { csvFor, exportZip } from '$lib/server/export';
@@ -16,7 +17,10 @@ const T0 = Date.UTC(2026, 0, 5, 9, 30, 15, 123);
 let opSeq = 0;
 
 function makeStore() {
-	return new GroceryStore(openDatabase(':memory:'));
+	const db = openDatabase(':memory:');
+	// These tests check the Dutch wording; the household language decides it.
+	writeSettings(db, { language: 'nl' });
+	return new GroceryStore(db);
 }
 
 function apply(store: GroceryStore, payload: OpPayload, at: number) {

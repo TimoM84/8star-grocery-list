@@ -4,6 +4,7 @@
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { routeCategories } from '$lib/shared/planning';
+	import { m } from '$lib/client/i18n';
 
 	let { list }: { list: List } = $props();
 
@@ -15,13 +16,11 @@
 		const ok = await ui.confirm({
 			title:
 				kind === 'checklist'
-					? `“${list.name}” een checklist maken?`
-					: `“${list.name}” een boodschappenlijst maken?`,
+					? m.listSettings.toChecklistTitle(list.name)
+					: m.listSettings.toGroceryTitle(list.name),
 			message:
-				kind === 'checklist'
-					? 'Afvinken telt dan niet meer als aankoop, voorraad of voorspelling. De bestaande aankoopgeschiedenis blijft bewaard.'
-					: 'Afvinken telt vanaf nu als aankoop en voedt de voorspellingen. Eerdere checklist-vinkjes tellen niet mee.',
-			confirmLabel: kind === 'checklist' ? 'Checklist maken' : 'Boodschappenlijst maken'
+				kind === 'checklist' ? m.listSettings.toChecklistMessage : m.listSettings.toGroceryMessage,
+			confirmLabel: kind === 'checklist' ? m.listSettings.toChecklist : m.listSettings.toGrocery
 		});
 		if (ok) app.setListKind(list, kind);
 	}
@@ -41,8 +40,8 @@
 	data-name={list.name}
 >
 	<p class="px-1 pb-2 font-semibold [overflow-wrap:anywhere]">{list.name}</p>
-	<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Soort lijst {list.name}">
-		{#each [{ id: 'grocery', label: 'Boodschappen' }, { id: 'checklist', label: 'Checklist' }] as k (k.id)}
+	<div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.listSettings.kind(list.name)}>
+		{#each [{ id: 'grocery', label: m.listSettings.grocery }, { id: 'checklist', label: m.listSettings.checklist }] as k (k.id)}
 			<button
 				type="button"
 				role="radio"
@@ -63,15 +62,15 @@
 			onclick={() => (routeOpen = !routeOpen)}
 			data-testid="route-toggle"
 		>
-			<span class="flex-1">Looproute</span>
+			<span class="flex-1">{m.listSettings.route}</span>
 			<span class="text-sm font-normal text-muted"
-				>{list.categoryOrder ? 'eigen volgorde' : 'standaard'}</span
+				>{list.categoryOrder ? m.listSettings.customOrder : m.listSettings.defaultOrder}</span
 			>
 			<Icon name={routeOpen ? 'chevronUp' : 'chevronDown'} class="text-faint" />
 		</button>
 		{#if routeOpen}
 			<p class="px-2 pb-2 text-sm text-muted">
-				Volgorde van de categorieën bij “Per categorie” voor deze winkel.
+				{m.listSettings.routeHelp}
 			</p>
 			<ol class="space-y-1" data-testid="route-list">
 				{#each route as c, i (c.id)}
@@ -80,7 +79,7 @@
 						<button
 							type="button"
 							class="grid h-12 w-12 place-items-center disabled:opacity-30"
-							aria-label="{c.name} eerder"
+							aria-label={m.listSettings.earlier(c.name)}
 							disabled={i === 0}
 							onclick={() => move(i, -1)}
 							data-testid="route-up"><Icon name="arrowUp" size={20} /></button
@@ -88,7 +87,7 @@
 						<button
 							type="button"
 							class="grid h-12 w-12 place-items-center disabled:opacity-30"
-							aria-label="{c.name} later"
+							aria-label={m.listSettings.later(c.name)}
 							disabled={i === route.length - 1}
 							onclick={() => move(i, 1)}
 							data-testid="route-down"><Icon name="arrowDown" size={20} /></button
@@ -101,13 +100,13 @@
 					type="button"
 					class="mt-2 min-h-12 w-full rounded-2xl text-sm font-semibold text-muted active:bg-surface-2"
 					onclick={() => app.setCategoryOrder(list, null)}
-					data-testid="route-reset">Standaardvolgorde gebruiken</button
+					data-testid="route-reset">{m.listSettings.useDefault}</button
 				>
 			{/if}
 		{/if}
 	{:else}
 		<p class="mt-2 px-1 text-sm text-muted">
-			Vaste volgorde, ‘Nog te doen’ en ‘Afgerond’. Telt niet als aankoop.
+			{m.listSettings.checklistHelp}
 		</p>
 	{/if}
 </div>

@@ -6,8 +6,8 @@
 	import { ui } from '$lib/client/ui.svelte';
 	import { searchProducts, frequent } from '$lib/shared/selectors';
 	import { searchKey } from '$lib/shared/text';
-	import { formatDayHeading, relativeDay } from '$lib/client/format';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { formatDayHeading, formatTime, relativeDay } from '$lib/client/format';
+	import { m, qty } from '$lib/client/i18n';
 
 	interface Purchase {
 		cycleId: string;
@@ -106,25 +106,28 @@
 		return groups;
 	});
 
-	const filters: { id: Filter; label: string }[] = [
-		{ id: 'all', label: 'Alles' },
-		{ id: 'favorites', label: 'Favorieten' },
-		{ id: 'frequent', label: 'Vaak gekocht' }
-	];
+	const filters = $derived<{ id: Filter; label: string }[]>([
+		{ id: 'all', label: m.list.all },
+		{ id: 'favorites', label: m.suggestions.favorites },
+		{ id: 'frequent', label: m.suggestions.frequent }
+	]);
 </script>
 
-<svelte:head><title>Historie · 8star</title></svelte:head>
+<svelte:head><title>{m.nav.history} · 8star</title></svelte:head>
 
 <header
 	class="pt-safe sticky top-0 z-20 border-b border-line/60 bg-bg/95 pb-3 backdrop-blur [@media(orientation:landscape)_and_(max-height:560px)]:static"
 >
-	<PageHeader title="Historie" subtitle="{app.view?.products.length ?? 0} producten">
+	<PageHeader
+		title={m.nav.history}
+		subtitle={m.history.productCount(app.view?.products.length ?? 0)}
+	>
 		<div
 			class="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-surface-2 p-1"
 			role="tablist"
-			aria-label="Weergave"
+			aria-label={m.list.display}
 		>
-			{#each [['products', 'Producten'], ['purchases', 'Aankopen']] as [id, label] (id)}
+			{#each [['products', m.history.products], ['purchases', m.history.purchases]] as [id, label] (id)}
 				<button
 					type="button"
 					role="tab"
@@ -146,8 +149,8 @@
 			<input
 				type="search"
 				bind:value={query}
-				placeholder="Zoek in alle producten"
-				aria-label="Zoeken"
+				placeholder={m.history.search}
+				aria-label={m.history.searchLabel}
 				enterkeyhint="search"
 				class="h-13 w-full rounded-2xl border border-line bg-surface pr-12 pl-12 text-lg outline-none focus:border-accent"
 				data-testid="history-search"
@@ -156,7 +159,7 @@
 				<button
 					type="button"
 					class="absolute top-1/2 right-1 grid h-12 w-12 -translate-y-1/2 place-items-center text-faint"
-					aria-label="Zoekopdracht wissen"
+					aria-label={m.history.clearSearch}
 					onclick={() => (query = '')}><Icon name="x" size={20} /></button
 				>
 			{/if}
@@ -166,7 +169,7 @@
 
 <main class="px-safe mx-auto max-w-2xl pt-4">
 	{#if tab === 'products'}
-		<div class="mb-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Filter">
+		<div class="mb-3 flex flex-wrap gap-2" role="radiogroup" aria-label={m.history.filter}>
 			{#each filters as f (f.id)}
 				<button
 					type="button"
@@ -185,7 +188,7 @@
 				class="rounded-2xl bg-surface-2 px-4 py-6 text-center text-muted"
 				data-testid="history-empty"
 			>
-				{query ? `Niets gevonden voor “${query}”.` : 'Nog geen producten.'}
+				{query ? m.history.nothingFound(query) : m.history.noProducts}
 			</p>
 		{:else}
 			<ul class="space-y-2" data-testid="history-products">
@@ -194,8 +197,8 @@
 						<ProductRow
 							view={v}
 							detail={v.stats.purchaseCount
-								? `${v.stats.purchaseCount}× gekocht · laatst ${relativeDay(v.stats.lastPurchasedAt, app.now)}`
-								: 'Nog niet gekocht'}
+								? `${m.suggestions.bought(v.stats.purchaseCount)} · ${m.suggestions.last(relativeDay(v.stats.lastPurchasedAt, app.now))}`
+								: m.history.notBought}
 						/>
 					</li>
 				{/each}
@@ -204,7 +207,8 @@
 	{:else}
 		{#if offline}
 			<p class="mb-3 flex items-center gap-2 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-				<Icon name="cloudOff" size={18} /> Offline: recente aankopen van dit apparaat.
+				<Icon name="cloudOff" size={18} />
+				{m.history.offline}
 			</p>
 		{/if}
 		{#if grouped.length === 0}
@@ -212,9 +216,7 @@
 				class="rounded-2xl bg-surface-2 px-4 py-6 text-center text-muted"
 				data-testid="history-empty"
 			>
-				{query
-					? `Geen aankopen gevonden voor “${query}”.`
-					: 'Nog geen aankopen. Vink items af om ze hier te zien.'}
+				{query ? m.history.noPurchasesFound(query) : m.history.noPurchases}
 			</p>
 		{:else}
 			<div class="space-y-5" data-testid="history-purchases">
@@ -237,12 +239,9 @@
 											<span class="block font-medium [overflow-wrap:anywhere]">{p.productName}</span
 											>
 											<span class="block text-sm text-muted">
-												{new Date(p.completedAt).toLocaleTimeString('nl-NL', {
-													hour: '2-digit',
-													minute: '2-digit'
-												})}{p.listName ? ` · ${p.listName}` : ''}{formatQuantity(p.quantity, p.unit)
-													? ` · ${formatQuantity(p.quantity, p.unit)}`
-													: ''}
+												{formatTime(p.completedAt)}{p.listName
+													? ` · ${app.historyListName(p.listName)}`
+													: ''}{qty(p.quantity, p.unit) ? ` · ${qty(p.quantity, p.unit)}` : ''}
 											</span>
 										</span>
 									</button>
@@ -256,7 +255,8 @@
 						type="button"
 						class="min-h-12 w-full rounded-2xl bg-surface-2 font-semibold active:bg-surface-3"
 						disabled={loadingMore}
-						onclick={() => load(false)}>{loadingMore ? 'Laden…' : 'Meer laden'}</button
+						onclick={() => load(false)}
+						>{loadingMore ? m.productSheet.loading : m.history.loadMore}</button
 					>
 				{/if}
 			</div>

@@ -20,6 +20,13 @@ import { UNITS } from '$lib/shared/quantity';
 import { cleanName, nameKey, MAX_NAME_LENGTH, MAX_NOTE_LENGTH } from '$lib/shared/text';
 import type { Settings } from '$lib/shared/settings';
 import { readSettings } from '../settings';
+import {
+	DEFAULT_LANGUAGE,
+	LANGUAGES,
+	isLanguage,
+	messagesFor,
+	type Messages
+} from '$lib/shared/i18n';
 
 export const EXPORT_FORMAT = '8star-grocery-export';
 export const EXPORT_FORMAT_VERSION = 2;
@@ -464,24 +471,27 @@ export class Validator {
 	errors: string[] = [];
 	warnings: string[] = [];
 
+	/** Messages are in the household language (English when none is given). */
+	constructor(readonly t: Messages = messagesFor(DEFAULT_LANGUAGE)) {}
+
 	error(path: string, message: string) {
 		if (this.errors.length < 200) this.errors.push(`${path}: ${message}`);
 	}
 
 	obj(v: unknown, path: string): R | null {
 		if (typeof v === 'object' && v !== null && !Array.isArray(v)) return v as R;
-		this.error(path, 'moet een object zijn');
+		this.error(path, this.t.import.validate.object);
 		return null;
 	}
 
 	arr(v: unknown, path: string, required = true): unknown[] {
 		if (v === undefined && !required) return [];
 		if (!Array.isArray(v)) {
-			this.error(path, 'moet een lijst (array) zijn');
+			this.error(path, this.t.import.validate.array);
 			return [];
 		}
 		if (v.length > MAX_RECORDS) {
-			this.error(path, `te veel records (max ${MAX_RECORDS})`);
+			this.error(path, this.t.import.validate.tooMany(MAX_RECORDS));
 			return [];
 		}
 		return v;
@@ -489,7 +499,7 @@ export class Validator {
 
 	id(v: unknown, path: string): string {
 		if (typeof v === 'string' && ID_RE.test(v)) return v;
-		this.error(path, 'ongeldige id (letters, cijfers, - en _, max 64 tekens)');
+		this.error(path, this.t.import.validate.id);
 		return '';
 	}
 
@@ -503,14 +513,14 @@ export class Validator {
 			const n = cleanName(v);
 			if (n && n.length <= MAX_NAME_LENGTH) return n;
 		}
-		this.error(path, `naam ontbreekt of is langer dan ${MAX_NAME_LENGTH} tekens`);
+		this.error(path, this.t.import.validate.name(MAX_NAME_LENGTH));
 		return '';
 	}
 
 	time(v: unknown, path: string): number {
 		const t = parseTimestamp(v);
 		if (t === null) {
-			this.error(path, 'ongeldige datum/tijd (verwacht ISO 8601, bijv. 2026-10-24T08:30:00Z)');
+			this.error(path, this.t.import.validate.time);
 			return 0;
 		}
 		return t;
@@ -525,14 +535,14 @@ export class Validator {
 		if (v === null || v === undefined || v === '') return null;
 		if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 100000)
 			return Math.round(v * 1000) / 1000;
-		this.error(path, 'ongeldige hoeveelheid (getal groter dan 0)');
+		this.error(path, this.t.import.validate.quantity);
 		return null;
 	}
 
 	unit(v: unknown, path: string): string | null {
 		if (v === null || v === undefined || v === '') return null;
 		if (typeof v === 'string' && (UNITS as readonly string[]).includes(v)) return v;
-		this.error(path, `onbekende eenheid (toegestaan: ${UNITS.join(', ')})`);
+		this.error(path, this.t.import.validate.unit(UNITS.join(', ')));
 		return null;
 	}
 
@@ -542,21 +552,21 @@ export class Validator {
 			const n = cleanName(v);
 			if (n.length <= MAX_NOTE_LENGTH) return n || null;
 		}
-		this.error(path, `notitie langer dan ${MAX_NOTE_LENGTH} tekens`);
+		this.error(path, this.t.import.validate.note(MAX_NOTE_LENGTH));
 		return null;
 	}
 
 	number(v: unknown, path: string, fallback: number): number {
 		if (v === undefined || v === null) return fallback;
 		if (typeof v === 'number' && Number.isFinite(v)) return v;
-		this.error(path, 'moet een getal zijn');
+		this.error(path, this.t.import.validate.number);
 		return fallback;
 	}
 
 	int(v: unknown, path: string, fallback: number): number {
 		if (v === undefined || v === null) return fallback;
 		if (typeof v === 'number' && Number.isInteger(v)) return v;
-		this.error(path, 'moet een geheel getal zijn');
+		this.error(path, this.t.import.validate.integer);
 		return fallback;
 	}
 }
@@ -661,24 +671,22 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		bundles: [],
 		media: []
 	};
-	const file = v.obj(input, 'bestand');
+	const vt = v.t.import.validate;
+	const file = v.obj(input, vt.file);
 	if (!file) return empty;
 
 	let data: R | null;
 	if (file.format === EXPORT_FORMAT) {
 		if (typeof file.formatVersion !== 'number' || file.formatVersion > EXPORT_FORMAT_VERSION) {
-			v.error(
-				'formatVersion',
-				`versie ${String(file.formatVersion)} wordt niet ondersteund (max ${EXPORT_FORMAT_VERSION}); werk de app bij`
-			);
+			v.error('formatVersion', vt.version(String(file.formatVersion), EXPORT_FORMAT_VERSION));
 			return empty;
 		}
 		data = v.obj(file.data, 'data');
 	} else if (file.app === '8star-grocery-list' && Array.isArray(file.cycles)) {
-		v.warnings.push('Oud exportformaat (v1.0.0) herkend en omgezet.');
+		v.warnings.push(vt.legacy);
 		data = legacyToCurrent(file);
 	} else {
-		v.error('format', `geen 8star-export (verwacht "format": "${EXPORT_FORMAT}")`);
+		v.error('format', vt.notExport(EXPORT_FORMAT));
 		return empty;
 	}
 	if (!data) return empty;
@@ -701,7 +709,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const o = r as R;
 		const kind = o.kind === undefined || o.kind === null ? 'grocery' : o.kind;
 		if (kind !== 'grocery' && kind !== 'checklist')
-			v.error(`${path}.kind`, 'moet "grocery" of "checklist" zijn');
+			v.error(`${path}.kind`, vt.oneOf('"grocery", "checklist"'));
 		let categoryOrder: string[] | null = null;
 		if (Array.isArray(o.categoryOrder))
 			categoryOrder = o.categoryOrder.map((c, i) => v.id(c, `${path}.categoryOrder[${i}]`));
@@ -738,7 +746,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const createdAt = v.time(o.createdAt, `${p}.createdAt`);
 		const stock = o.stockStatus ?? 'unknown';
 		if (!['unknown', 'enough', 'low', 'out'].includes(stock as string))
-			v.error(`${p}.stockStatus`, 'moet unknown, enough, low of out zijn');
+			v.error(`${p}.stockStatus`, vt.oneOf('unknown, enough, low, out'));
 		const defaultQuantity = v.quantity(o.defaultQuantity, `${p}.defaultQuantity`);
 		out.products.push({
 			id: v.id(o.id, `${p}.id`),
@@ -784,8 +792,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 					? ev.quantity
 					: null
 				: v.quantity(o.purchasedQuantity, `${p}.purchasedQuantity`);
-		if (ev.completedAt !== null && ev.cancelledAt !== null)
-			v.error(p, 'kan niet zowel gekocht als geannuleerd zijn');
+		if (ev.completedAt !== null && ev.cancelledAt !== null) v.error(p, vt.boughtAndCancelled);
 		out.purchaseEvents.push(ev);
 	});
 
@@ -794,11 +801,11 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const o = v.obj(r, p);
 		if (!o) return;
 		const status = o.status === 'active' || o.status === 'completed' ? o.status : null;
-		if (!status) v.error(`${p}.status`, 'moet "active" of "completed" zijn');
+		if (!status) v.error(`${p}.status`, vt.oneOf('"active", "completed"'));
 		const activatedAt = v.time(o.activatedAt, `${p}.activatedAt`);
 		const completedAt = v.nullableTime(o.completedAt, `${p}.completedAt`);
 		if (status === 'completed' && completedAt === null)
-			v.error(`${p}.completedAt`, 'verplicht voor afgevinkte items');
+			v.error(`${p}.completedAt`, vt.completedRequired);
 		out.listItems.push({
 			id: v.id(o.id, `${p}.id`),
 			listId: v.id(o.listId, `${p}.listId`),
@@ -839,7 +846,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const createdAt = v.nullableTime(o.createdAt, `${p}.createdAt`) ?? 0;
 		const servings = o.servings === null || o.servings === undefined ? null : o.servings;
 		if (servings !== null && !(typeof servings === 'number' && servings > 0 && servings <= 100))
-			v.error(`${p}.servings`, 'moet een getal tussen 0 en 100 zijn');
+			v.error(`${p}.servings`, vt.between(0, 100));
 		out.bundles.push({
 			id: v.id(o.id, `${p}.id`),
 			name: v.name(o.name, `${p}.name`),
@@ -868,7 +875,7 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const id = v.id(o.id, `${p}.id`);
 		const file = typeof o.file === 'string' ? o.file : '';
 		if (!/^media\/[A-Za-z0-9_-]{1,64}\.(jpg|png|webp)$/.test(file))
-			v.error(`${p}.file`, 'ongeldige bestandsnaam');
+			v.error(`${p}.file`, vt.fileName);
 		out.media.push({ id, file, createdAt: v.nullableTime(o.createdAt, `${p}.createdAt`) ?? 0 });
 	});
 
@@ -878,12 +885,11 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		if (!o) return;
 		const status =
 			o.status === 'open' || o.status === 'accepted' || o.status === 'dismissed' ? o.status : null;
-		if (!status) v.error(`${p}.status`, 'moet "open", "accepted" of "dismissed" zijn');
+		if (!status) v.error(`${p}.status`, vt.oneOf('"open", "accepted", "dismissed"'));
 		const confidence = typeof o.confidence === 'number' ? o.confidence : NaN;
-		if (!(confidence >= 0 && confidence <= 1))
-			v.error(`${p}.confidence`, 'moet tussen 0 en 1 liggen');
+		if (!(confidence >= 0 && confidence <= 1)) v.error(`${p}.confidence`, vt.between(0, 1));
 		const reasoning = typeof o.reasoning === 'string' ? o.reasoning.trim().slice(0, 1000) : '';
-		if (!reasoning) v.error(`${p}.reasoning`, 'ontbreekt');
+		if (!reasoning) v.error(`${p}.reasoning`, vt.missing);
 		out.aiRecommendations.push({
 			id: v.id(o.id, `${p}.id`),
 			productId: v.id(o.productId, `${p}.productId`),
@@ -906,7 +912,11 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			out.settings = {};
 			if (o.aiEnabled !== undefined) {
 				if (typeof o.aiEnabled === 'boolean') out.settings.aiEnabled = o.aiEnabled;
-				else v.error('settings.aiEnabled', 'moet true of false zijn');
+				else v.error('settings.aiEnabled', vt.oneOf('true, false'));
+			}
+			if (o.language !== undefined) {
+				if (isLanguage(o.language)) out.settings.language = o.language;
+				else v.error('settings.language', vt.oneOf(LANGUAGES.join(', ')));
 			}
 		}
 	}
@@ -917,11 +927,12 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 
 /** Referential integrity and uniqueness inside an import file. */
 function checkIntegrity(d: ImportDataset, v: Validator) {
+	const vt = v.t.import.validate;
 	const unique = <T extends { id: string }>(rows: T[], label: string) => {
 		const seen = new Set<string>();
 		for (const r of rows) {
 			if (!r.id) continue;
-			if (seen.has(r.id)) v.error(label, `dubbele id "${r.id}"`);
+			if (seen.has(r.id)) v.error(label, vt.duplicateId(r.id));
 			seen.add(r.id);
 		}
 		return seen;
@@ -937,35 +948,32 @@ function checkIntegrity(d: ImportDataset, v: Validator) {
 	for (const p of d.products) {
 		const key = nameKey(p.name);
 		if (key && names.has(key))
-			v.error('products', `product "${p.name}" komt twee keer voor (${names.get(key)} en ${p.id})`);
+			v.error('products', vt.duplicateProduct(p.name, names.get(key) ?? '', p.id));
 		names.set(key, p.id);
 		if (p.categoryId && !categories.has(p.categoryId))
-			v.error(`product ${p.id}`, `onbekende categorie "${p.categoryId}"`);
+			v.error(`product ${p.id}`, vt.unknownCategory(p.categoryId ?? ''));
 	}
 	const pairs = new Set<string>();
 	for (const it of d.listItems) {
-		if (!lists.has(it.listId)) v.error(`listItem ${it.id}`, `onbekende lijst "${it.listId}"`);
-		if (!products.has(it.productId))
-			v.error(`listItem ${it.id}`, `onbekend product "${it.productId}"`);
+		if (!lists.has(it.listId)) v.error(`listItem ${it.id}`, vt.unknownList(it.listId));
+		if (!products.has(it.productId)) v.error(`listItem ${it.id}`, vt.unknownProduct(it.productId));
 		if (it.purchaseEventId && !events.has(it.purchaseEventId))
-			v.error(`listItem ${it.id}`, `onbekende aankoop "${it.purchaseEventId}"`);
+			v.error(`listItem ${it.id}`, vt.unknownPurchase(it.purchaseEventId ?? ''));
 		const pair = `${it.listId}|${it.productId}`;
-		if (pairs.has(pair)) v.error(`listItem ${it.id}`, 'product staat twee keer op dezelfde lijst');
+		if (pairs.has(pair)) v.error(`listItem ${it.id}`, vt.twiceOnList);
 		pairs.add(pair);
 	}
 	for (const e of d.purchaseEvents) {
 		if (!products.has(e.productId))
-			v.error(`purchaseEvent ${e.id}`, `onbekend product "${e.productId}"`);
+			v.error(`purchaseEvent ${e.id}`, vt.unknownProduct(e.productId));
 		if (e.listId && !lists.has(e.listId)) {
-			v.warnings.push(
-				`Aankoop ${e.id}: lijst "${e.listId}" bestaat niet in het bestand; zonder lijst bewaard.`
-			);
+			v.warnings.push(vt.purchaseListMissing(e.id, e.listId));
 			e.listId = null;
 		}
 	}
 	for (const r of d.aiRecommendations) {
 		if (!products.has(r.productId))
-			v.error(`aiRecommendation ${r.id}`, `onbekend product "${r.productId}"`);
+			v.error(`aiRecommendation ${r.id}`, vt.unknownProduct(r.productId));
 	}
 	unique(d.productAliases, 'productAliases');
 	unique(d.bundles, 'bundles');
@@ -976,17 +984,16 @@ function checkIntegrity(d: ImportDataset, v: Validator) {
 	const aliasKeys = new Set<string>();
 	for (const a of d.productAliases) {
 		const key = nameKey(a.alias);
-		if (!products.has(a.productId)) v.error(`alias ${a.id}`, `onbekend product "${a.productId}"`);
-		if (names.has(key)) v.error(`alias ${a.id}`, `"${a.alias}" is ook een productnaam`);
-		if (aliasKeys.has(key)) v.error(`alias ${a.id}`, `zoekwoord "${a.alias}" komt twee keer voor`);
+		if (!products.has(a.productId)) v.error(`alias ${a.id}`, vt.unknownProduct(a.productId));
+		if (names.has(key)) v.error(`alias ${a.id}`, vt.aliasIsName(a.alias));
+		if (aliasKeys.has(key)) v.error(`alias ${a.id}`, vt.aliasTwice(a.alias));
 		aliasKeys.add(key);
 	}
 	for (const b of d.bundles) {
 		const seen = new Set<string>();
 		for (const l of b.lines) {
-			if (!products.has(l.productId))
-				v.error(`bundle ${b.id}`, `onbekend product "${l.productId}"`);
-			if (seen.has(l.productId)) v.error(`bundle ${b.id}`, 'product staat twee keer in de bundel');
+			if (!products.has(l.productId)) v.error(`bundle ${b.id}`, vt.unknownProduct(l.productId));
+			if (seen.has(l.productId)) v.error(`bundle ${b.id}`, vt.twiceInBundle);
 			seen.add(l.productId);
 		}
 	}
@@ -995,7 +1002,7 @@ function checkIntegrity(d: ImportDataset, v: Validator) {
 	}
 	for (const p of d.products) {
 		if (p.preferredListId && !lists.has(p.preferredListId)) {
-			v.warnings.push(`Product ${p.id}: voorkeurslijst bestaat niet in het bestand; weggelaten.`);
+			v.warnings.push(vt.preferredListMissing(p.id));
 			p.preferredListId = null;
 		}
 	}

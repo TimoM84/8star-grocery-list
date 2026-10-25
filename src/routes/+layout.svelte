@@ -15,11 +15,17 @@
 	import BundleSheet from '$lib/components/BundleSheet.svelte';
 	import BundleAddSheet from '$lib/components/BundleAddSheet.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import { m } from '$lib/client/i18n';
 
 	let { children }: { children: Snippet } = $props();
 
 	// While a sheet or dialog is open the page behind it is inert (no focus, no taps, no AT).
 	const modalOpen = $derived(!!page.state.sheet || !!page.state.confirm);
+
+	// The document language follows the household language (screen readers, hyphenation).
+	$effect(() => {
+		document.documentElement.lang = app.language;
+	});
 
 	onMount(() => {
 		app.start();
@@ -64,12 +70,12 @@
 			class="mx-3 mt-2 flex max-w-xl items-center gap-2 rounded-2xl bg-ink py-1 pr-1 pl-4 text-bg shadow-card sm:mx-auto"
 		>
 			<Icon name="refresh" size={20} />
-			<span class="min-w-0 flex-1 py-2">Nieuwe versie beschikbaar</span>
+			<span class="min-w-0 flex-1 py-2">{m.shell.updateReady}</span>
 			<button
 				type="button"
 				class="min-h-12 rounded-xl bg-accent px-4 font-semibold text-on-accent"
 				onclick={() => pwa.applyUpdate()}
-				data-testid="update-button">Bijwerken</button
+				data-testid="update-button">{m.shell.update}</button
 			>
 		</div>
 	</div>
@@ -85,9 +91,7 @@
 					class="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-surface-3 border-t-accent"
 				></div>
 				<p class="mt-4 text-muted">
-					{app.status.connection === 'offline'
-						? 'Geen verbinding en nog geen gegevens op dit apparaat. Verbind met het thuisnetwerk of de VPN.'
-						: 'Lijst laden…'}
+					{app.status.connection === 'offline' ? m.shell.offlineNoData : m.shell.loading}
 				</p>
 			</div>
 		</div>

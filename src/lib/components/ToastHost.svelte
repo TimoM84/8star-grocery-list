@@ -3,6 +3,7 @@
 	import { fly } from 'svelte/transition';
 	import { toasts } from '$lib/client/toast.svelte';
 	import Icon from './Icon.svelte';
+	import { m } from '$lib/client/i18n';
 
 	const toast = $derived(toasts.current);
 </script>
@@ -52,7 +53,7 @@
 					<button
 						type="button"
 						class="grid h-12 w-12 shrink-0 place-items-center rounded-xl opacity-80 active:bg-white/15"
-						aria-label="Melding sluiten"
+						aria-label={m.common.dismissNotice}
 						onclick={() => toasts.dismiss()}
 					>
 						<Icon name="x" size={20} />

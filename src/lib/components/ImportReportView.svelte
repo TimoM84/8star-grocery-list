@@ -1,18 +1,19 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import type { ImportReport } from '$lib/shared/transfer';
+	import { m } from '$lib/client/i18n';
 
 	let { report, testid }: { report: ImportReport; testid?: string } = $props();
 	let showAll = $state(false);
 	const LIMIT = 8;
 	const title = $derived(
 		!report.ok
-			? 'Import geweigerd'
+			? m.importReport.rejected
 			: report.preview
 				? report.mode === 'replace'
-					? 'Voorbeeld: alles vervangen'
-					: 'Voorbeeld'
-				: 'Import voltooid'
+					? m.importReport.previewReplace
+					: m.importReport.preview
+				: m.importReport.done
 	);
 </script>
 
@@ -35,25 +36,22 @@
 		{/each}
 	</ul>
 	{#if report.backupFile}
-		<p class="text-sm text-muted">Back-up vooraf: {report.backupFile}</p>
+		<p class="text-sm text-muted">{m.importReport.backup(report.backupFile)}</p>
 	{/if}
-	{#each [{ items: report.errors, label: 'Fouten', cls: 'text-danger' }, { items: report.warnings, label: 'Let op', cls: 'text-warn' }] as group (group.label)}
+	{#each [{ id: 'errors', items: report.errors, label: m.importReport.errors, cls: 'text-danger' }, { id: 'warnings', items: report.warnings, label: m.importReport.warnings, cls: 'text-warn' }] as group (group.id)}
 		{#if group.items.length}
 			<div>
 				<p class="text-sm font-semibold {group.cls}">{group.label} ({group.items.length})</p>
-				<ul
-					class="space-y-0.5 text-sm"
-					data-testid="{testid}-{group.label === 'Fouten' ? 'errors' : 'warnings'}"
-				>
-					{#each showAll ? group.items : group.items.slice(0, LIMIT) as m, i (i)}
-						<li class="[overflow-wrap:anywhere]">{m}</li>
+				<ul class="space-y-0.5 text-sm" data-testid="{testid}-{group.id}">
+					{#each showAll ? group.items : group.items.slice(0, LIMIT) as line, i (i)}
+						<li class="[overflow-wrap:anywhere]">{line}</li>
 					{/each}
 				</ul>
 				{#if group.items.length > LIMIT && !showAll}
 					<button
 						type="button"
 						class="min-h-12 text-sm font-semibold underline"
-						onclick={() => (showAll = true)}>Toon alle {group.items.length}</button
+						onclick={() => (showAll = true)}>{m.importReport.showAll(group.items.length)}</button
 					>
 				{/if}
 			</div>

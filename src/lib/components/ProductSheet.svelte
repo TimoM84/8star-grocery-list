@@ -13,7 +13,7 @@
 		formatPerMonth,
 		relativeDay
 	} from '$lib/client/format';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 
 	interface Cycle {
 		cycleId: string;
@@ -78,9 +78,9 @@
 	async function remove() {
 		if (!product) return;
 		const ok = await ui.confirm({
-			title: `“${product.name}” definitief verwijderen?`,
-			message: 'Het product verdwijnt van alle lijsten, inclusief alle aankoopgeschiedenis.',
-			confirmLabel: 'Verwijderen',
+			title: m.productSheet.deleteTitle(product.name),
+			message: m.productSheet.deleteMessage,
+			confirmLabel: m.common.delete,
 			danger: true
 		});
 		if (!ok) return;
@@ -91,7 +91,7 @@
 
 <Sheet
 	{open}
-	title={product?.name ?? 'Product'}
+	title={product?.name ?? m.common.product}
 	onclose={() => ui.closeSheet()}
 	testid="product-sheet"
 >
@@ -109,9 +109,11 @@
 					data-testid="product-add"
 				>
 					{#if item?.status === 'active'}
-						<Icon name="check" size={20} /> Op de lijst
+						<Icon name="check" size={20} />
+						{m.productSheet.onList}
 					{:else}
-						<Icon name="plus" size={20} /> Op de lijst
+						<Icon name="plus" size={20} />
+						{m.productSheet.onList}
 					{/if}
 				</button>
 				<button
@@ -129,14 +131,14 @@
 						filled={product.favorite}
 						class={product.favorite ? 'text-star' : 'text-faint'}
 					/>
-					Favoriet
+					{m.common.favorite}
 				</button>
 			</div>
 
 			<ProductMemory {product} />
 
 			<dl class="grid grid-cols-2 gap-2" data-testid="product-stats">
-				{#each [['Keer gekocht', String(stats.purchaseCount)], ['Laatst gekocht', relativeDay(stats.lastPurchasedAt, app.now)], ['Gem. interval', formatInterval(stats.avgIntervalDays)], ['Frequentie', formatPerMonth(stats.perMonth)], ['Volgende keer', stats.nextEstimatedAt ? relativeDay(stats.nextEstimatedAt, app.now) : '—'], ['Eerst toegevoegd', formatDate(product.createdAt, app.now)]] as [label, value] (label)}
+				{#each [[m.productSheet.timesBought, String(stats.purchaseCount)], [m.productSheet.lastBought, relativeDay(stats.lastPurchasedAt, app.now)], [m.productSheet.avgInterval, formatInterval(stats.avgIntervalDays)], [m.productSheet.frequency, formatPerMonth(stats.perMonth)], [m.productSheet.next, stats.nextEstimatedAt ? relativeDay(stats.nextEstimatedAt, app.now) : '—'], [m.productSheet.firstAdded, formatDate(product.createdAt, app.now)]] as [label, value] (label)}
 					<div class="rounded-2xl bg-surface-2 px-3.5 py-3">
 						<dt class="text-sm text-muted">{label}</dt>
 						<dd class="text-lg font-semibold [overflow-wrap:anywhere]">{value}</dd>
@@ -146,7 +148,7 @@
 			{#if !stats.hasEnoughHistory}
 				<p class="flex gap-2 text-sm text-muted">
 					<Icon name="info" size={18} class="mt-0.5 shrink-0" />
-					Na {MIN_HISTORY} aankopen schatten we wanneer je dit weer nodig hebt.
+					{m.productSheet.needHistory(MIN_HISTORY)}
 				</p>
 			{/if}
 
@@ -161,13 +163,14 @@
 					<input
 						bind:value={name}
 						maxlength="80"
-						aria-label="Nieuwe naam"
+						aria-label={m.ordered.newName}
 						class="h-12 min-w-0 flex-1 rounded-2xl border border-line bg-bg px-4 text-lg outline-none focus:border-accent"
 						data-testid="product-name-input"
 					/>
 					<button
 						type="submit"
-						class="min-h-12 rounded-2xl bg-accent px-4 font-semibold text-on-accent">Opslaan</button
+						class="min-h-12 rounded-2xl bg-accent px-4 font-semibold text-on-accent"
+						>{m.common.save}</button
 					>
 				</form>
 			{:else}
@@ -180,7 +183,8 @@
 					}}
 					data-testid="product-rename"
 				>
-					<Icon name="pencil" size={20} class="text-faint" /> Naam wijzigen
+					<Icon name="pencil" size={20} class="text-faint" />
+					{m.productSheet.rename}
 				</button>
 			{/if}
 
@@ -190,14 +194,14 @@
 			/>
 
 			<section>
-				<h3 class="mb-2 text-sm font-semibold text-muted">Geschiedenis</h3>
+				<h3 class="mb-2 text-sm font-semibold text-muted">{m.productSheet.history}</h3>
 				{#if shownCycles === null}
-					<p class="text-muted">Laden…</p>
+					<p class="text-muted">{m.productSheet.loading}</p>
 				{:else if shownCycles.length === 0}
-					<p class="text-muted">Nog geen geschiedenis.</p>
+					<p class="text-muted">{m.productSheet.noHistory}</p>
 				{:else}
 					{#if cyclesError}
-						<p class="mb-2 text-sm text-warn">Offline: alleen recente aankopen zichtbaar.</p>
+						<p class="mb-2 text-sm text-warn">{m.productSheet.offline}</p>
 					{/if}
 					<ol class="divide-y divide-line rounded-2xl bg-surface-2" data-testid="product-cycles">
 						{#each shownCycles.slice(0, 60) as c (c.cycleId)}
@@ -212,21 +216,21 @@
 								<span class="min-w-0 flex-1">
 									<span class="block font-medium">
 										{c.completedAt
-											? 'Gekocht'
+											? m.productSheet.bought
 											: c.cancelledAt
-												? 'Verwijderd van lijst'
-												: 'Op de lijst'}
-										{#if formatQuantity(c.quantity, c.unit)}<span class="text-muted">
-												· {formatQuantity(c.quantity, c.unit)}</span
+												? m.productSheet.removed
+												: m.productSheet.onList}
+										{#if qty(c.quantity, c.unit)}<span class="text-muted">
+												· {qty(c.quantity, c.unit)}</span
 											>{/if}
 									</span>
 									<span class="block text-sm text-muted">
 										{formatDateTime(
 											c.completedAt ?? c.cancelledAt ?? c.activatedAt,
 											app.now
-										)}{c.listName ? ` · ${c.listName}` : ''}
+										)}{c.listName ? ` · ${app.historyListName(c.listName)}` : ''}
 										{#if c.completedAt && c.activatedAt !== c.completedAt}
-											· toegevoegd {formatDate(c.activatedAt, app.now)}
+											· {m.productSheet.added(formatDate(c.activatedAt, app.now))}
 										{/if}
 									</span>
 								</span>
@@ -242,7 +246,8 @@
 				onclick={remove}
 				data-testid="product-delete"
 			>
-				<Icon name="trash" size={20} /> Product en geschiedenis verwijderen
+				<Icon name="trash" size={20} />
+				{m.productSheet.delete}
 			</button>
 		</div>
 	{/if}

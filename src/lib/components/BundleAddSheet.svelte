@@ -5,7 +5,8 @@
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { planEntry, scaleBundle } from '$lib/shared/planning';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { formatNumber } from '$lib/client/format';
+	import { m, qty } from '$lib/client/i18n';
 
 	const open = $derived(ui.isOpen('bundle-add'));
 	const bundleId = $derived(ui.data<{ bundleId: string }>('bundle-add')?.bundleId ?? null);
@@ -41,7 +42,7 @@
 		bundle && app.view
 			? scaleBundle(bundle, servings).map((l) => {
 					const product = app.product(l.productId);
-					const name = product?.name ?? 'Onbekend product';
+					const name = product?.name ?? m.common.unknownProduct;
 					const plan = planEntry(app.view!, listId, { name, quantity: l.quantity, unit: l.unit });
 					return { line: l, name, plan };
 				})
@@ -83,18 +84,18 @@
 
 <Sheet
 	{open}
-	title={bundle ? `${bundle.name} toevoegen` : 'Bundel'}
+	title={bundle ? m.bundle.addTitle(bundle.name) : m.bundle.bundle}
 	onclose={() => ui.closeSheet()}
 	testid="bundle-add-sheet"
 >
 	{#if bundle}
 		{#if bundle.servings}
 			<div class="mb-4 flex items-center gap-3">
-				<span class="flex-1 font-semibold">Personen</span>
+				<span class="flex-1 font-semibold">{m.bundle.servings}</span>
 				<button
 					type="button"
 					class="grid h-12 w-12 place-items-center rounded-2xl bg-surface-2 disabled:opacity-40"
-					aria-label="Minder personen"
+					aria-label={m.bundle.fewer}
 					disabled={(servings ?? 1) <= 1}
 					onclick={() => (servings = Math.max(1, (servings ?? 1) - 1))}
 					><Icon name="minus" /></button
@@ -105,21 +106,21 @@
 				<button
 					type="button"
 					class="grid h-12 w-12 place-items-center rounded-2xl bg-surface-2"
-					aria-label="Meer personen"
+					aria-label={m.bundle.more}
 					onclick={() => (servings = Math.min(50, (servings ?? 1) + 1))}
 					data-testid="bundle-servings-plus"><Icon name="plus" /></button
 				>
 			</div>
 			{#if factor !== 1}
 				<p class="-mt-2 mb-4 text-sm text-muted">
-					Hoeveelheden × {String(factor).replace('.', ',')} (recept voor {bundle.servings}).
+					{m.bundle.scaled(formatNumber(factor), bundle.servings)}
 				</p>
 			{/if}
 		{/if}
 
 		{#if app.groceryLists.length > 1}
 			<fieldset class="mb-4">
-				<legend class="mb-2 text-sm font-semibold text-muted">Toevoegen aan</legend>
+				<legend class="mb-2 text-sm font-semibold text-muted">{m.bulk.addTo}</legend>
 				<div class="flex flex-wrap gap-2">
 					{#each app.lists as l (l.id)}
 						<button
@@ -135,7 +136,7 @@
 			</fieldset>
 		{/if}
 
-		<p class="mb-2 text-sm text-muted">Vink uit wat je al in huis hebt.</p>
+		<p class="mb-2 text-sm text-muted">{m.bundle.untickOwned}</p>
 		<ul class="space-y-2" data-testid="bundle-add-lines">
 			{#each rows as r (r.line.lineId)}
 				{@const id = r.line.lineId}
@@ -147,7 +148,7 @@
 					<div class="flex min-h-12 items-center gap-2">
 						<CheckToggle
 							checked={!skipped[id]}
-							label="{r.name} toevoegen"
+							label={m.bundle.include(r.name)}
 							onchange={(v) => (skipped = { ...skipped, [id]: !v })}
 							testid="bundle-add-include"
 						/>
@@ -155,24 +156,23 @@
 						{#if r.line.quantity !== null}
 							<span
 								class="shrink-0 rounded-full bg-accent-soft px-2.5 py-0.5 text-sm font-semibold text-accent"
-								>{formatQuantity(r.line.quantity, r.line.unit)}</span
+								>{qty(r.line.quantity, r.line.unit)}</span
 							>
 						{/if}
 					</div>
 					{#if r.line.exact !== null && !skipped[id]}
 						<p class="pl-14 text-sm text-warn" data-testid="bundle-rounded">
-							Precies {String(r.line.exact).replace('.', ',')}: afgerond naar boven, controleer
-							even.
+							{m.bundle.rounded(formatNumber(r.line.exact))}
 						</p>
 					{/if}
 					{#if r.plan?.state === 'active' && !skipped[id]}
 						<p class="pl-14 text-sm text-muted">
-							Staat er al op{r.plan.item?.quantity != null
-								? `: ${formatQuantity(r.plan.item.quantity, r.plan.item.unit)}`
-								: ''}
+							{r.plan.item?.quantity != null
+								? m.bulk.onListQty(qty(r.plan.item.quantity, r.plan.item.unit))
+								: m.bulk.onList}
 						</p>
 						<div class="mt-1 flex flex-wrap gap-2 pl-14">
-							{#each [{ id: 'skip', label: 'Laat zo', show: true }, { id: 'extra', label: dup?.extra ? `${formatQuantity(dup.extra.quantity, dup.extra.unit)} extra` : '', show: !!dup?.extra }, { id: 'set', label: dup?.set ? `Wijzigen naar ${formatQuantity(dup.set.quantity, dup.set.unit)}` : '', show: !!dup?.set }] as opt (opt.id)}
+							{#each [{ id: 'skip', label: m.addPrompt.keep, show: true }, { id: 'extra', label: dup?.extra ? m.addPrompt.extra(qty(dup.extra.quantity, dup.extra.unit)) : '', show: !!dup?.extra }, { id: 'set', label: dup?.set ? m.addPrompt.setTo(qty(dup.set.quantity, dup.set.unit)) : '', show: !!dup?.set }] as opt (opt.id)}
 								{#if opt.show}
 									<button
 										type="button"
@@ -201,7 +201,7 @@
 			onclick={submit}
 			data-testid="bundle-add-submit"
 		>
-			{chosen.length === 1 ? '1 product verwerken' : `${chosen.length} producten verwerken`}
+			{m.bulk.submit(chosen.length)}
 		</button>
 	{/snippet}
 </Sheet>

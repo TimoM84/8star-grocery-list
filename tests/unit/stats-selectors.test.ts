@@ -113,7 +113,7 @@ describe('selectors', () => {
 		snoozes: [],
 		rounds: [],
 		claims: [],
-		settings: { aiEnabled: true }
+		settings: { aiEnabled: true, language: 'nl' }
 	};
 
 	it('autocompletes prefix matches first and skips exact active duplicates', () => {

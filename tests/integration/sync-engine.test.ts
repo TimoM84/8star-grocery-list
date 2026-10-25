@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { openDatabase } from '$lib/server/db';
 import { GroceryStore } from '$lib/server/store';
+import { writeSettings } from '$lib/server/settings';
 import { SyncEngine, type Storage } from '$lib/client/sync';
 import type { PendingRecord } from '$lib/client/idb';
 import * as idb from '$lib/client/idb';
@@ -14,7 +15,10 @@ import type { OpPayload } from '$lib/shared/ops';
 /** In-process "server" reachable through a fake fetch that can be switched off. */
 function makeServer() {
 	const net = { online: true };
-	const srv = { store: new GroceryStore(openDatabase(':memory:')) };
+	const db = openDatabase(':memory:');
+	// These tests check the Dutch wording; the household language decides it.
+	writeSettings(db, { language: 'nl' });
+	const srv = { store: new GroceryStore(db) };
 	const fetchImpl = (async (input: string, init?: RequestInit) => {
 		if (!net.online) throw new TypeError('Failed to fetch');
 		const url = new URL(input, 'http://test');

@@ -4,7 +4,8 @@
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { MAX_BULK_LINES, parseBulk, planEntry, type EntryPlan } from '$lib/shared/planning';
-	import { formatQuantity, parseEntry } from '$lib/shared/quantity';
+	import { parseEntry } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 	import { cleanName, MAX_NAME_LENGTH, nameKey } from '$lib/shared/text';
 
 	interface Data {
@@ -24,7 +25,6 @@
 		choice: 'skip' | 'extra' | 'set';
 	}
 
-	const PLACEHOLDER = '2 kg aardappelen\nmelk\n- kaas, jong belegen';
 	const open = $derived(ui.isOpen('bulk'));
 	const data = $derived(ui.data<Data>('bulk') ?? {});
 
@@ -80,8 +80,8 @@
 			const parsed = parseEntry(line.text);
 			const name = cleanName(parsed.name);
 			let error: string | null = null;
-			if (!name) error = 'Geen productnaam';
-			else if (name.length > MAX_NAME_LENGTH) error = `Langer dan ${MAX_NAME_LENGTH} tekens`;
+			if (!name) error = m.bulk.noName;
+			else if (name.length > MAX_NAME_LENGTH) error = m.bulk.tooLong(MAX_NAME_LENGTH);
 			const plan =
 				!error && app.view
 					? planEntry(app.view, listId, { name, quantity: parsed.quantity, unit: parsed.unit })
@@ -145,42 +145,45 @@
 
 	function status(r: Row): string {
 		if (r.error) return r.error;
-		if (r.duplicateOf !== null) return `Dubbel: staat ook op regel ${r.duplicateOf + 1}`;
+		if (r.duplicateOf !== null) return m.bulk.duplicate(r.duplicateOf + 1);
 		const p = r.plan;
 		if (!p) return '';
 		const other = p.elsewhere.length
-			? ` · ook op ${p.elsewhere.map((e) => e.list.name).join(', ')}`
+			? ` · ${m.bulk.alsoOn(p.elsewhere.map((e) => e.list.name).join(', '))}`
 			: '';
 		if (p.state === 'active')
-			return `Staat er al op${p.item?.quantity != null ? `: ${formatQuantity(p.item.quantity, p.item.unit)}` : ''}${other}`;
-		if (p.state === 'reactivate') return `Weer op de lijst${other}`;
-		return (p.product ? 'Bekend product' : 'Nieuw product') + other;
+			return (
+				(p.item?.quantity != null
+					? m.bulk.onListQty(qty(p.item.quantity, p.item.unit))
+					: m.bulk.onList) + other
+			);
+		if (p.state === 'reactivate') return m.bulk.backOnList + other;
+		return (p.product ? m.bulk.known : m.bulk.new) + other;
 	}
 
-	const listName = $derived(app.list(listId)?.name ?? 'lijst');
+	const listName = $derived(app.list(listId)?.name ?? m.common.list);
 </script>
 
 <Sheet
 	{open}
-	title={stage === 'input' ? 'Meerdere toevoegen' : `Controleren · ${listName}`}
+	title={stage === 'input' ? m.bulk.title : `${m.bulk.check} · ${listName}`}
 	onclose={() => ui.closeSheet()}
 	testid="bulk-sheet"
 >
 	{#if stage === 'input'}
 		<label for="bulk-text" class="mb-1.5 block text-sm font-semibold text-muted"
-			>Eén product per regel</label
+			>{m.bulk.onePerLine}</label
 		>
 		<textarea
 			id="bulk-text"
 			bind:value={text}
 			rows="8"
 			maxlength="10000"
-			placeholder={PLACEHOLDER}
+			placeholder={m.bulk.placeholder}
 			class="w-full rounded-2xl border border-line bg-bg p-4 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
 			data-testid="bulk-text"></textarea>
 		<p class="mt-2 text-sm text-muted">
-			Opsommingstekens worden weggehaald. Komma’s horen bij de naam. Hoeveelheden zoals “2 kg” of
-			“x3” worden herkend. Maximaal {MAX_BULK_LINES} regels.
+			{m.bulk.help(MAX_BULK_LINES)}
 		</p>
 	{:else}
 		{#if data.source === 'share'}
@@ -188,13 +191,13 @@
 				class="mb-3 rounded-2xl bg-surface-2 px-4 py-3 text-sm text-muted"
 				data-testid="share-note"
 			>
-				Gedeeld vanuit een andere app. Er is nog niets toegevoegd: controleer de lijst hieronder.
-				{#if data.url}Links worden niet geopend of uitgelezen.{/if}
+				{m.bulk.shared}
+				{#if data.url}{m.bulk.linksIgnored}{/if}
 			</p>
 		{/if}
 		{#if app.lists.length > 1}
 			<fieldset class="mb-4">
-				<legend class="mb-2 text-sm font-semibold text-muted">Toevoegen aan</legend>
+				<legend class="mb-2 text-sm font-semibold text-muted">{m.bulk.addTo}</legend>
 				<div class="flex flex-wrap gap-2">
 					{#each app.lists as l (l.id)}
 						<button
@@ -212,11 +215,11 @@
 		{/if}
 		{#if truncated}
 			<p class="mb-3 text-sm text-warn">
-				Alleen de eerste {MAX_BULK_LINES} regels; {truncated} regel(s) weggelaten.
+				{m.bulk.truncated(MAX_BULK_LINES, truncated)}
 			</p>
 		{/if}
 		{#if rows.length === 0}
-			<p class="text-muted">Geen regels gevonden.</p>
+			<p class="text-muted">{m.bulk.noLines}</p>
 		{/if}
 		<ul class="space-y-2" data-testid="bulk-lines">
 			{#each rows as r, i (r.line.key)}
@@ -229,14 +232,14 @@
 					<div class="flex items-center gap-2">
 						<CheckToggle
 							checked={lines[i].include}
-							label="Regel {i + 1} meenemen"
+							label={m.bulk.include(i + 1)}
 							onchange={(v) => (lines[i].include = v)}
 							testid="bulk-include"
 						/>
 						<input
 							bind:value={lines[i].text}
 							maxlength="120"
-							aria-label="Regel {i + 1}"
+							aria-label={m.bulk.line(i + 1)}
 							class="h-12 min-w-0 flex-1 rounded-xl border border-line bg-bg px-3 text-base outline-none focus:border-accent"
 							data-testid="bulk-line-text"
 						/>
@@ -254,9 +257,9 @@
 						<div
 							class="mt-1 flex flex-wrap gap-2 pl-14"
 							role="radiogroup"
-							aria-label="Wat doen met {r.name}"
+							aria-label={m.bulk.whatToDo(r.name)}
 						>
-							{#each [{ id: 'skip', label: 'Laat zo', show: true }, { id: 'extra', label: dup?.extra ? `${formatQuantity(dup.extra.quantity, dup.extra.unit)} extra` : '', show: !!dup?.extra }, { id: 'set', label: dup?.set ? `Wijzigen naar ${formatQuantity(dup.set.quantity, dup.set.unit)}` : '', show: !!dup?.set }] as opt (opt.id)}
+							{#each [{ id: 'skip', label: m.addPrompt.keep, show: true }, { id: 'extra', label: dup?.extra ? m.addPrompt.extra(qty(dup.extra.quantity, dup.extra.unit)) : '', show: !!dup?.extra }, { id: 'set', label: dup?.set ? m.addPrompt.setTo(qty(dup.set.quantity, dup.set.unit)) : '', show: !!dup?.set }] as opt (opt.id)}
 								{#if opt.show}
 									<button
 										type="button"
@@ -278,8 +281,7 @@
 		</ul>
 		{#if blocking.length}
 			<p class="mt-3 text-sm text-danger" data-testid="bulk-blocking">
-				Pas {blocking.length === 1 ? 'de rode regel' : `de ${blocking.length} rode regels`} aan of vink
-				ze uit.
+				{m.bulk.blocking(blocking.length)}
 			</p>
 		{/if}
 	{/if}
@@ -290,7 +292,7 @@
 				class="min-h-12 w-full rounded-2xl bg-accent text-base font-semibold text-on-accent active:bg-accent-strong disabled:opacity-50"
 				disabled={!text.trim()}
 				onclick={preview}
-				data-testid="bulk-preview">Controleren</button
+				data-testid="bulk-preview">{m.bulk.check}</button
 			>
 		{:else}
 			<div class="grid grid-cols-[auto_1fr] gap-3">
@@ -300,7 +302,7 @@
 					onclick={() => {
 						text = lines.map((l) => l.text).join('\n');
 						stage = 'input';
-					}}>Terug</button
+					}}>{m.common.back}</button
 				>
 				<button
 					type="button"
@@ -309,9 +311,7 @@
 					onclick={submit}
 					data-testid="bulk-submit"
 				>
-					{actionable.length === 1
-						? '1 product verwerken'
-						: `${actionable.length} producten verwerken`}
+					{m.bulk.submit(actionable.length)}
 				</button>
 			</div>
 		{/if}

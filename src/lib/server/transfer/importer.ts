@@ -8,6 +8,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { GroceryStore } from '../store';
 import { createBackupSync } from '../backup';
 import { readSettings, writeSettings } from '../settings';
+import { householdMessages } from '../i18n';
+import { LANGUAGE_NAMES, type Messages } from '$lib/shared/i18n';
 import {
 	parseExportFile,
 	parseTimestamp,
@@ -47,35 +49,29 @@ interface BackupContents {
 	files: Map<string, Buffer>;
 }
 
-function readBackupZip(bytes: Buffer): BackupContents {
+function readBackupZip(bytes: Buffer, t: Messages): BackupContents {
 	let entries: Map<string, Buffer>;
 	try {
 		entries = readZip(bytes);
 	} catch (e) {
 		throw new ImportRejected(
-			'Het ZIP-bestand kan niet worden gelezen: ' +
-				(e instanceof ZipError ? e.message : 'onbekende fout')
+			t.import.zipUnreadable(e instanceof ZipError ? zipErrorText(e, t) : t.import.unknownError)
 		);
 	}
 	const manifestRaw = entries.get('manifest.json');
-	if (!manifestRaw)
-		throw new ImportRejected(
-			'Dit ZIP-bestand is geen 8star-back-up (manifest.json ontbreekt). CSV-ZIP-exports kunnen niet worden hersteld.'
-		);
+	if (!manifestRaw) throw new ImportRejected(t.import.notBackup);
 	let manifest: { format?: unknown; formatVersion?: unknown };
 	try {
 		manifest = JSON.parse(manifestRaw.toString('utf8'));
 	} catch {
-		throw new ImportRejected('manifest.json is geen geldige JSON.');
+		throw new ImportRejected(t.import.manifestInvalid);
 	}
 	if (manifest.format !== BACKUP_FORMAT)
-		throw new ImportRejected(`Onbekend back-upformaat (verwacht "${BACKUP_FORMAT}").`);
+		throw new ImportRejected(t.import.unknownBackupFormat(BACKUP_FORMAT));
 	if (typeof manifest.formatVersion !== 'number' || manifest.formatVersion > BACKUP_FORMAT_VERSION)
-		throw new ImportRejected(
-			`Back-upversie ${String(manifest.formatVersion)} wordt niet ondersteund; werk de app bij.`
-		);
+		throw new ImportRejected(t.import.backupVersion(String(manifest.formatVersion)));
 	const exportRaw = entries.get('export.json');
-	if (!exportRaw) throw new ImportRejected('export.json ontbreekt in de back-up.');
+	if (!exportRaw) throw new ImportRejected(t.import.exportMissing);
 	return { exportText: exportRaw.toString('utf8'), files: entries };
 }
 
@@ -86,43 +82,42 @@ const newId = (prefix: string) => `${prefix}-${randomBytes(9).toString('base64ur
 class PreviewRollback extends Error {}
 class ImportRejected extends Error {}
 
-const LABELS: Record<string, [string, string]> = {
-	lists: ['lijst', 'lijsten'],
-	categories: ['categorie', 'categorieën'],
-	products: ['product', 'producten'],
-	listItems: ['item op een lijst', 'items op lijsten'],
-	purchaseEvents: ['aankoop', 'aankopen'],
-	aiRecommendations: ['AI-suggestie', 'AI-suggesties'],
-	productAliases: ['zoekwoord', 'zoekwoorden'],
-	bundles: ['bundel', 'bundels'],
-	media: ['foto', 'foto’s']
-};
+/** Readable text for a ZIP problem (the codes come from zip.ts). */
+function zipErrorText(e: ZipError, t: Messages): string {
+	const z = t.import.zip;
+	switch (e.code) {
+		case 'compression':
+			return z.compression(e.entry);
+		case 'checksum':
+			return z.checksum(e.entry);
+		case 'extract':
+			return z.extract(e.entry);
+		default:
+			return z[e.code];
+	}
+}
 
 function counter(): Counter {
 	return { added: 0, matched: 0, updated: 0, duplicates: 0, skipped: 0, removed: 0 };
 }
 
-function summarise(report: ImportReport) {
+function summarise(report: ImportReport, t: Messages) {
 	const lines: string[] = [];
+	const s = t.import.summary;
 	const n = (count: number, key: string) => {
-		const [one, many] = LABELS[key] ?? [key, key];
+		const [one, many] = s.labels[key] ?? [key, key];
 		return `${count} ${count === 1 ? one : many}`;
 	};
-	const verb = report.preview ? (s: string) => `wordt ${s}` : (s: string) => s;
-	const verbMany = report.preview ? (s: string) => `worden ${s}` : (s: string) => s;
 	for (const [key, c] of Object.entries(report.counts)) {
 		const parts: string[] = [];
-		const v = (count: number, single: string, plural: string) =>
-			parts.push(`${n(count, key)} ${count === 1 ? verb(single) : verbMany(plural)}`);
-		if (c.removed) v(c.removed, 'verwijderd', 'verwijderd');
-		if (c.added) v(c.added, 'toegevoegd', 'toegevoegd');
-		if (c.updated) v(c.updated, 'bijgewerkt', 'bijgewerkt');
-		if (c.matched) parts.push(`${n(c.matched, key)} al aanwezig`);
-		if (c.duplicates) parts.push(`${c.duplicates} dubbel (overgeslagen)`);
-		if (c.skipped) parts.push(`${c.skipped} overgeslagen`);
+		for (const action of ['removed', 'added', 'updated'] as const)
+			if (c[action]) parts.push(s.action(n(c[action], key), c[action], action, report.preview));
+		if (c.matched) parts.push(s.matched(n(c.matched, key)));
+		if (c.duplicates) parts.push(s.duplicates(c.duplicates));
+		if (c.skipped) parts.push(s.skipped(c.skipped));
 		if (parts.length) lines.push(parts.join(', '));
 	}
-	if (!lines.length) lines.push('Geen wijzigingen: alles stond er al in.');
+	if (!lines.length) lines.push(s.nothing);
 	report.summary = lines;
 }
 
@@ -143,23 +138,24 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 	};
 	const count = (key: string) => (report.counts[key] ??= counter());
 	const settingNotes: string[] = [];
+	const t = householdMessages(store.db);
 
 	try {
 		// Parse and validate everything before touching the database.
 		let apply: () => void;
 		let backup: BackupContents | null = null;
 		if (kind === 'json' && options.bytes && options.bytes.subarray(0, 4).equals(ZIP_MAGIC)) {
-			backup = readBackupZip(options.bytes);
+			backup = readBackupZip(options.bytes, t);
 		}
 		if (kind === 'json' || kind === 'ai') {
 			let parsed: unknown;
 			try {
 				parsed = JSON.parse((backup?.exportText ?? options.text).replace(/^\ufeff/, ''));
 			} catch {
-				throw new ImportRejected('Het bestand is geen geldige JSON.');
+				throw new ImportRejected(t.import.invalidJson);
 			}
 			if (kind === 'json') {
-				const v = new Validator();
+				const v = new Validator(t);
 				const data = parseExportFile(parsed, v);
 				report.warnings.push(...v.warnings);
 				if (v.errors.length) {
@@ -167,30 +163,32 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 					throw new ImportRejected('');
 				}
 				if (mode === 'replace' && !data.lists.length)
-					throw new ImportRejected('Een volledige vervanging heeft minstens één lijst nodig.');
-				const photos = preparePhotos(store, data, backup, options, report, count);
+					throw new ImportRejected(t.import.replaceNeedsList);
+				const photos = preparePhotos(store, data, backup, options, report, count, t);
 				apply = () => {
 					photos();
 					if (mode === 'replace') {
 						replaceAll(store, data, count, now);
-						settingNotes.push(...applySettings(store, data, preview));
+						settingNotes.push(...applySettings(store, data, preview, t));
 					} else {
 						mergeDataset(store, data, count, report, now);
+						const current = readSettings(store.db);
 						const ai = data.settings?.aiEnabled;
-						if (ai !== undefined && ai !== readSettings(store.db).aiEnabled)
-							settingNotes.push(
-								'De AI-instelling uit het bestand is niet overgenomen (alleen bij alles vervangen).'
-							);
+						if (ai !== undefined && ai !== current.aiEnabled)
+							settingNotes.push(t.import.aiNotApplied);
+						const language = data.settings?.language;
+						if (language !== undefined && language !== current.language)
+							settingNotes.push(t.import.languageNotApplied);
 					}
 				};
 			} else {
-				apply = prepareAiImport(store, parsed, count, report, now);
+				apply = prepareAiImport(store, parsed, count, report, now, t);
 			}
 		} else {
 			apply =
 				kind === 'products-csv'
-					? prepareProductsCsv(store, options.text, count, report, now)
-					: preparePurchasesCsv(store, options.text, count, report, now);
+					? prepareProductsCsv(store, options.text, count, report, now, t)
+					: preparePurchasesCsv(store, options.text, count, report, now, t);
 		}
 
 		if (!preview && mode === 'replace') {
@@ -212,21 +210,20 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 		}
 		report.ok = true;
 	} catch (e) {
-		if (e instanceof ImportRejected || e instanceof CsvError) {
+		if (e instanceof ImportRejected) {
 			if (e.message) report.errors.unshift(e.message);
+		} else if (e instanceof CsvError) {
+			report.errors.unshift(e.code === 'unclosed' ? t.import.csvUnclosed : t.import.csvEmpty);
 		} else {
 			console.error('[8star] import failed', e);
-			report.errors.unshift(
-				'De import is mislukt en volledig teruggedraaid: ' +
-					((e as Error).message ?? 'onbekende fout')
-			);
+			report.errors.unshift(t.import.failed((e as Error).message ?? t.import.unknownError));
 		}
 		report.ok = false;
 	}
 	if (report.ok) {
-		summarise(report);
+		summarise(report, t);
 		report.summary.push(...settingNotes);
-	} else report.summary = ['Er is niets gewijzigd.'];
+	} else report.summary = [t.import.nothingChanged];
 	return report;
 }
 
@@ -305,17 +302,19 @@ function replaceAll(
  * A full replace restores the settings stored in the file. Files without settings (older
  * exports) keep the current ones. Returns summary lines for changed settings.
  */
-function applySettings(store: GroceryStore, d: ImportDataset, preview: boolean): string[] {
-	const ai = d.settings?.aiEnabled;
-	if (ai === undefined || !writeSettings(store.db, { aiEnabled: ai })) return [];
-	const verb = preview
-		? ai
-			? 'worden aangezet'
-			: 'worden uitgezet'
-		: ai
-			? 'aangezet'
-			: 'uitgezet';
-	return [`AI-functies ${verb} (instelling uit het bestand)`];
+function applySettings(
+	store: GroceryStore,
+	d: ImportDataset,
+	preview: boolean,
+	t: Messages
+): string[] {
+	const notes: string[] = [];
+	const { aiEnabled, language } = d.settings ?? {};
+	if (aiEnabled !== undefined && writeSettings(store.db, { aiEnabled }))
+		notes.push(t.import.aiSetting(aiEnabled, preview));
+	if (language !== undefined && writeSettings(store.db, { language }))
+		notes.push(t.import.languageSetting(LANGUAGE_NAMES[language], preview));
+	return notes;
 }
 
 function productInserter(store: GroceryStore) {
@@ -435,18 +434,19 @@ function preparePhotos(
 	backup: BackupContents | null,
 	options: ImportOptions,
 	report: ImportReport,
-	count: (k: string) => Counter
+	count: (k: string) => Counter,
+	t: Messages
 ): () => void {
 	const available = new Map<string, { data: Buffer; createdAt: number }>();
 	for (const m of d.media) {
 		const data = backup?.files.get(m.file);
 		if (!data) continue;
 		try {
-			sanitizeImage(data);
+			sanitizeImage(data, t);
 			available.set(m.id, { data, createdAt: m.createdAt });
 		} catch (e) {
 			report.warnings.push(
-				`Foto ${m.id} is overgeslagen: ${e instanceof MediaError ? e.message : 'onleesbaar'}`
+				t.import.photoSkipped(m.id, e instanceof MediaError ? e.message : t.import.unreadable)
 			);
 		}
 	}
@@ -461,10 +461,7 @@ function preparePhotos(
 			missing++;
 		}
 	}
-	if (missing)
-		report.warnings.push(
-			`${missing} productfoto${missing === 1 ? '' : '’s'} niet in dit bestand: alleen de volledige back-up (ZIP) bevat foto’s.`
-		);
+	if (missing) report.warnings.push(t.import.photosMissing(missing));
 	return () => {
 		for (const [id, m] of available) {
 			if (options.preview || !options.media) {
@@ -823,21 +820,19 @@ function prepareAiImport(
 	input: unknown,
 	count: (k: string) => Counter,
 	report: ImportReport,
-	now: number
+	now: number,
+	t: Messages
 ): () => void {
 	const file = input as Record<string, unknown> | null;
 	if (!file || typeof file !== 'object' || Array.isArray(file))
-		throw new ImportRejected('Het bestand moet een JSON-object zijn.');
-	if (file.format !== AI_FORMAT)
-		throw new ImportRejected(`Geen AI-suggestiebestand: verwacht "format": "${AI_FORMAT}".`);
+		throw new ImportRejected(t.import.notObject);
+	if (file.format !== AI_FORMAT) throw new ImportRejected(t.import.notAiFile(AI_FORMAT));
 	if (file.formatVersion !== AI_FORMAT_VERSION)
-		throw new ImportRejected(
-			`formatVersion ${String(file.formatVersion)} wordt niet ondersteund (verwacht ${AI_FORMAT_VERSION}).`
-		);
+		throw new ImportRejected(t.import.aiVersion(String(file.formatVersion), AI_FORMAT_VERSION));
 	if (!Array.isArray(file.recommendations) || !file.recommendations.length)
-		throw new ImportRejected('"recommendations" moet een niet-lege lijst zijn.');
+		throw new ImportRejected(t.import.recommendationsEmpty);
 	if (file.recommendations.length > 1000)
-		throw new ImportRejected('Maximaal 1000 suggesties per bestand.');
+		throw new ImportRejected(t.import.tooManyRecommendations(1000));
 	const source =
 		typeof file.source === 'string' && file.source.trim() ? file.source.trim().slice(0, 80) : null;
 	const batchId = newId('batch');
@@ -849,48 +844,36 @@ function prepareAiImport(
 	);
 	const valid = new Map<string, RecInput>();
 	file.recommendations.forEach((raw: unknown, i: number) => {
-		const at = `Suggestie ${i + 1}`;
+		const ai = t.import.ai;
+		const at = ai.at(i + 1);
 		const r = raw as Record<string, unknown>;
-		if (!r || typeof r !== 'object')
-			return report.warnings.push(`${at}: geen object, overgeslagen.`);
+		if (!r || typeof r !== 'object') return report.warnings.push(ai.notObject(at));
 		const productId = r.productId;
 		if (typeof productId !== 'string' || !ID_RE.test(productId))
-			return report.warnings.push(`${at}: "productId" ontbreekt of is ongeldig, overgeslagen.`);
+			return report.warnings.push(ai.badProductId(at));
 		const name = products.get(productId);
-		if (!name)
-			return report.warnings.push(`${at}: product "${productId}" bestaat niet, overgeslagen.`);
+		if (!name) return report.warnings.push(ai.unknownProduct(at, productId));
 		if (typeof r.productName === 'string' && nameKey(r.productName) !== nameKey(name))
-			report.warnings.push(
-				`${at}: productName "${r.productName}" hoort niet bij ${productId} ("${name}"); de id is gebruikt.`
-			);
+			report.warnings.push(ai.nameMismatch(at, r.productName, productId, name));
 		const confidence = r.confidence;
 		if (typeof confidence !== 'number' || !(confidence >= 0 && confidence <= 1))
-			return report.warnings.push(
-				`${at} (${name}): "confidence" moet een getal tussen 0 en 1 zijn, overgeslagen.`
-			);
+			return report.warnings.push(ai.confidence(`${at} (${name})`));
 		const reasoning = typeof r.reasoning === 'string' ? r.reasoning.trim() : '';
 		if (!reasoning || reasoning.length > 1000)
-			return report.warnings.push(
-				`${at} (${name}): "reasoning" ontbreekt of is langer dan 1000 tekens, overgeslagen.`
-			);
+			return report.warnings.push(ai.reasoning(`${at} (${name})`, 1000));
 		let quantity: number | null = null;
 		if (r.suggestedQuantity !== undefined && r.suggestedQuantity !== null) {
 			if (
 				typeof r.suggestedQuantity !== 'number' ||
 				!(r.suggestedQuantity > 0 && r.suggestedQuantity < 100000)
 			)
-				return report.warnings.push(
-					`${at} (${name}): "suggestedQuantity" moet een getal groter dan 0 zijn, overgeslagen.`
-				);
+				return report.warnings.push(ai.quantity(`${at} (${name})`));
 			quantity = Math.round(r.suggestedQuantity * 1000) / 1000;
 		}
 		let unit: string | null = null;
 		if (r.unit !== undefined && r.unit !== null && r.unit !== '') {
 			unit = typeof r.unit === 'string' ? normaliseUnit(r.unit) : null;
-			if (!unit)
-				return report.warnings.push(
-					`${at} (${name}): onbekende eenheid "${String(r.unit)}", overgeslagen.`
-				);
+			if (!unit) return report.warnings.push(ai.unit(`${at} (${name})`, String(r.unit)));
 			if (unit === 'stuks') unit = null;
 		}
 		let next: number | null = null;
@@ -900,15 +883,9 @@ function prepareAiImport(
 			r.nextPurchaseDate !== ''
 		) {
 			next = parseTimestamp(r.nextPurchaseDate);
-			if (next === null)
-				return report.warnings.push(
-					`${at} (${name}): "nextPurchaseDate" is geen ISO 8601-datum, overgeslagen.`
-				);
+			if (next === null) return report.warnings.push(ai.date(`${at} (${name})`));
 		}
-		if (valid.has(productId))
-			report.warnings.push(
-				`${at} (${name}): staat meerdere keren in het bestand; de laatste telt.`
-			);
+		if (valid.has(productId)) report.warnings.push(ai.repeated(`${at} (${name})`));
 		const rec = {
 			id: newId('ai'),
 			productId,
@@ -928,7 +905,7 @@ function prepareAiImport(
 	const invalid = file.recommendations.length - [...valid.values()].length;
 	if (!valid.size) {
 		report.errors.push(...report.warnings.splice(0));
-		throw new ImportRejected('Geen enkele geldige suggestie gevonden.');
+		throw new ImportRejected(t.import.ai.noneValid);
 	}
 
 	return () => {
@@ -1044,13 +1021,12 @@ function prepareProductsCsv(
 	text: string,
 	count: (k: string) => Counter,
 	report: ImportReport,
-	now: number
+	now: number,
+	t: Messages
 ): () => void {
 	const table = readCsvTable(text);
 	if (!hasColumn(table, 'product', 'naam', 'name'))
-		throw new ImportRejected(
-			'Kolom "product" ontbreekt (eerste regel moet de kolomnamen bevatten).'
-		);
+		throw new ImportRejected(t.import.csv.productColumnHeader);
 	const rows: {
 		line: number;
 		id: string | null;
@@ -1061,12 +1037,12 @@ function prepareProductsCsv(
 	for (const r of table.records) {
 		const name = cleanName(pick(r.values, 'product', 'naam', 'name'));
 		if (!name || name.length > MAX_NAME_LENGTH) {
-			report.errors.push(`Regel ${r.line}: productnaam ontbreekt of is te lang.`);
+			report.errors.push(t.import.csv.line(r.line, t.import.csv.badName));
 			continue;
 		}
 		const id = pick(r.values, 'product_id', 'id') || null;
 		if (id && !ID_RE.test(id)) {
-			report.errors.push(`Regel ${r.line}: ongeldige product_id "${id}".`);
+			report.errors.push(t.import.csv.line(r.line, t.import.csv.badProductId(id)));
 			continue;
 		}
 		const fav = pick(r.values, 'favoriet', 'favorite');
@@ -1079,10 +1055,8 @@ function prepareProductsCsv(
 		});
 	}
 	if (report.errors.length)
-		throw new ImportRejected(
-			`${report.errors.length} ongeldige regel(s); er is niets geïmporteerd.`
-		);
-	if (!rows.length) throw new ImportRejected('Het bestand bevat geen producten.');
+		throw new ImportRejected(t.import.csv.invalidLines(report.errors.length));
+	if (!rows.length) throw new ImportRejected(t.import.csv.noProducts);
 
 	return () => {
 		const db = store.db;
@@ -1129,13 +1103,14 @@ function preparePurchasesCsv(
 	text: string,
 	count: (k: string) => Counter,
 	report: ImportReport,
-	now: number
+	now: number,
+	t: Messages
 ): () => void {
+	const c = t.import.csv;
 	const table = readCsvTable(text);
-	if (!hasColumn(table, 'product', 'naam', 'name'))
-		throw new ImportRejected('Kolom "product" ontbreekt.');
+	if (!hasColumn(table, 'product', 'naam', 'name')) throw new ImportRejected(c.productColumn);
 	if (!hasColumn(table, 'gekocht', 'purchased_at', 'completed_at', 'datum', 'date'))
-		throw new ImportRejected('Kolom "gekocht" (aankoopmoment) ontbreekt.');
+		throw new ImportRejected(c.purchasedColumn);
 
 	interface PurchaseRow {
 		line: number;
@@ -1155,10 +1130,10 @@ function preparePurchasesCsv(
 	let skippedOpen = 0;
 	for (const r of table.records) {
 		const v = r.values;
-		const err = (m: string) => report.errors.push(`Regel ${r.line}: ${m}`);
+		const err = (m: string) => report.errors.push(c.line(r.line, m));
 		const name = cleanName(pick(v, 'product', 'naam', 'name'));
 		if (!name || name.length > MAX_NAME_LENGTH) {
-			err('productnaam ontbreekt of is te lang.');
+			err(c.badName);
 			continue;
 		}
 		const statusRaw = pick(v, 'status').toLowerCase();
@@ -1172,39 +1147,37 @@ function preparePurchasesCsv(
 			!cancelled &&
 			!['gekocht', 'purchased', 'completed', 'bought'].includes(statusRaw)
 		) {
-			err(`onbekende status "${statusRaw}" (gekocht, geannuleerd of open).`);
+			err(c.badStatus(statusRaw));
 			continue;
 		}
 		const completedRaw = pick(v, 'gekocht', 'purchased_at', 'completed_at', 'datum', 'date');
 		const cancelledRaw = pick(v, 'geannuleerd', 'cancelled_at');
 		const when = parseCsvDate(cancelled ? cancelledRaw || completedRaw : completedRaw);
 		if (when === null) {
-			err(
-				`ongeldige of ontbrekende datum "${cancelled ? cancelledRaw : completedRaw}" (gebruik bijv. 2026-10-24T18:30:00Z of 24-10-2026 18:30).`
-			);
+			err(c.badDate(cancelled ? cancelledRaw : completedRaw));
 			continue;
 		}
 		const activatedRaw = pick(v, 'geactiveerd', 'activated_at', 'toegevoegd');
 		const activated = activatedRaw ? parseCsvDate(activatedRaw) : when;
 		if (activated === null) {
-			err(`ongeldige datum "${activatedRaw}" in kolom geactiveerd.`);
+			err(c.badActivated(activatedRaw));
 			continue;
 		}
 		const quantity = csvNumber(pick(v, 'aantal', 'quantity'));
 		if (quantity === undefined) {
-			err(`ongeldig aantal "${pick(v, 'aantal', 'quantity')}".`);
+			err(c.badQuantity(pick(v, 'aantal', 'quantity')));
 			continue;
 		}
 		const unitRaw = pick(v, 'eenheid', 'unit');
 		const unit = unitRaw ? normaliseUnit(unitRaw) : null;
 		if (unitRaw && !unit) {
-			err(`onbekende eenheid "${unitRaw}".`);
+			err(c.badUnit(unitRaw));
 			continue;
 		}
 		const id = pick(v, 'purchase_id', 'aankoop_id', 'id') || null;
 		const productId = pick(v, 'product_id') || null;
 		if ((id && !ID_RE.test(id)) || (productId && !ID_RE.test(productId))) {
-			err('ongeldige id.');
+			err(c.badId);
 			continue;
 		}
 		rows.push({
@@ -1222,15 +1195,9 @@ function preparePurchasesCsv(
 			unit: unit === 'stuks' ? null : unit
 		});
 	}
-	if (report.errors.length)
-		throw new ImportRejected(
-			`${report.errors.length} ongeldige regel(s); er is niets geïmporteerd.`
-		);
-	if (!rows.length && !skippedOpen) throw new ImportRejected('Het bestand bevat geen aankopen.');
-	if (skippedOpen)
-		report.warnings.push(
-			`${skippedOpen} regel(s) met status "open" overgeslagen (dat zijn geen aankopen).`
-		);
+	if (report.errors.length) throw new ImportRejected(c.invalidLines(report.errors.length));
+	if (!rows.length && !skippedOpen) throw new ImportRejected(c.noPurchases);
+	if (skippedOpen) report.warnings.push(c.skippedOpen(skippedOpen));
 
 	return () => {
 		const db = store.db;
@@ -1306,8 +1273,6 @@ function preparePurchasesCsv(
 			events.added++;
 		}
 		if (unknownLists.size)
-			report.warnings.push(
-				`Onbekende lijst(en) ${[...unknownLists].map((l) => `"${l}"`).join(', ')}: aankopen zonder lijst bewaard.`
-			);
+			report.warnings.push(c.unknownLists([...unknownLists].map((l) => `"${l}"`).join(', ')));
 	};
 }

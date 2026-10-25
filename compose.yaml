@@ -1,15 +1,19 @@
 # 8star Grocery List — Docker Compose stack (managed through Dockhand).
 # Private network/VPN only: the port is bound to BIND_ADDRESS, never to a public interface.
+#
+# APP_VERSION is the only thing to change for an update. It picks the source (the Git tag
+# v<APP_VERSION> on GitHub, whatever branch Dockhand checked out), the image tag and the version
+# build argument, so all three always agree. The build fails if the tag doesn't exist.
 name: 8star-grocery
 
 services:
   app:
     build:
-      context: .
+      context: https://github.com/TimoM84/8star-grocery-list.git#v${APP_VERSION:-1.4.0}
       args:
         BUILD_ID: ${BUILD_ID:-}
-        APP_VERSION: ${APP_VERSION:-1.3.0}
-    image: 8star-grocery-list:${APP_VERSION:-1.3.0}
+        APP_VERSION: ${APP_VERSION:-1.4.0}
+    image: 8star-grocery-list:${APP_VERSION:-1.4.0}
     pull_policy: build
     restart: unless-stopped
     init: true

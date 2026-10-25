@@ -4,6 +4,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import Icon from './Icon.svelte';
+	import { m } from '$lib/client/i18n';
 
 	let {
 		open,
@@ -43,7 +44,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 h-full w-full cursor-default bg-black/45"
-			aria-label="Sluiten"
+			aria-label={m.common.close}
 			tabindex="-1"
 			onclick={onclose}
 			transition:fade={{ duration: ms(160) }}
@@ -67,7 +68,7 @@
 				<button
 					type="button"
 					class="mt-2 -mr-2 grid h-12 w-12 shrink-0 place-items-center rounded-full text-muted active:bg-surface-2"
-					aria-label="Sluiten"
+					aria-label={m.common.close}
 					onclick={onclose}
 				>
 					<Icon name="x" />

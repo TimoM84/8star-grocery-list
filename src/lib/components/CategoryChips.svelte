@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { app } from '$lib/client/app.svelte';
+	import { m } from '$lib/client/i18n';
 
 	let {
 		value = $bindable(),
@@ -14,8 +15,8 @@
 </script>
 
 <fieldset>
-	<legend class="mb-2 text-sm font-semibold text-muted">Categorie</legend>
-	<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Categorie">
+	<legend class="mb-2 text-sm font-semibold text-muted">{m.category.label}</legend>
+	<div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.category.label}>
 		{#each categories as c (c.id)}
 			<button
 				type="button"
@@ -39,7 +40,7 @@
 				: 'border-line bg-surface'}"
 			onclick={() => select(null)}
 		>
-			Geen categorie
+			{m.category.none}
 		</button>
 	</div>
 </fieldset>

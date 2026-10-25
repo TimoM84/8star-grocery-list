@@ -4,45 +4,50 @@ A self-hosted, offline-first grocery list for the whole household. It's a Progre
 built for Android phones, syncs in realtime between devices and runs as a single Docker
 container on your private network or VPN. No accounts, no cloud services, no telemetry.
 
-The UI is in Dutch; code and documentation are in English.
+The UI speaks English (default), Dutch, German, French and Spanish, chosen once for the whole
+household in Settings. Code and documentation are in English.
 
 <p>
-  <img src="docs/screenshots/lijst-390-portrait-light.png" width="200" alt="Main list, light mode" />
-  <img src="docs/screenshots/lijst-390-portrait-dark.png" width="200" alt="Main list, dark mode" />
-  <img src="docs/screenshots/suggesties-390-portrait-light.png" width="200" alt="Suggestions" />
-  <img src="docs/screenshots/gegevens-390-portrait-light.png" width="200" alt="Import and export" />
+  <img src="docs/screenshots/list-light.png" width="200" alt="Main list, light mode" />
+  <img src="docs/screenshots/list-dark.png" width="200" alt="Main list, dark mode" />
+  <img src="docs/screenshots/suggestions.png" width="200" alt="Suggestions" />
+  <img src="docs/screenshots/data.png" width="200" alt="Import and export" />
   <img src="docs/screenshots/theme-blue-light.png" width="200" alt="APP_PRIMARY_COLOR=#2563EB" />
 </p>
 
-New in 1.2:
-
 <p>
-  <img src="docs/screenshots/v12-winkelstand-390-light.png" width="200" alt="Winkelstand (shopping mode)" />
-  <img src="docs/screenshots/v12-staat-er-al-op-390-light.png" width="200" alt="Staat er al op: duplicate choices" />
-  <img src="docs/screenshots/v12-acties-390-dark.png" width="200" alt="Item actions in the shop, dark mode" />
-  <img src="docs/screenshots/v12-bundel-390-light.png" width="200" alt="Adding a bundle" />
-  <img src="docs/screenshots/v12-meerdere-390-light.png" width="200" alt="Pasting several lines" />
-  <img src="docs/screenshots/v12-winkelstand-390-dark.png" width="200" alt="Winkelstand, dark mode" />
-  <img src="docs/screenshots/v12-edit-390-light.png" width="200" alt="Edit sheet with note and substitute" />
-  <img src="docs/screenshots/v12-beheer-390-light.png" width="200" alt="Beheer: sync, device and list settings" />
+  <img src="docs/screenshots/settings-language.png" width="200" alt="Settings: language for the whole household" />
+  <img src="docs/screenshots/list-german.png" width="200" alt="The same list in German" />
+  <img src="docs/screenshots/shopping-light.png" width="200" alt="Shopping mode" />
+  <img src="docs/screenshots/already-on-list.png" width="200" alt="Already on the list: duplicate choices" />
+  <img src="docs/screenshots/actions-dark.png" width="200" alt="Item actions in the shop, dark mode" />
+  <img src="docs/screenshots/bundle.png" width="200" alt="Adding a bundle" />
+  <img src="docs/screenshots/several.png" width="200" alt="Pasting several lines" />
+  <img src="docs/screenshots/shopping-dark.png" width="200" alt="Shopping mode, dark mode" />
+  <img src="docs/screenshots/edit.png" width="200" alt="Edit sheet with note and substitute" />
 </p>
 
-Screenshots are produced by the Playwright suite (`npm run test:e2e` writes them to
-`screenshots/`); the ones above were refreshed from v1.2.0.
+Screenshots are produced by the Playwright suite: `e2e/readme-screenshots.spec.ts` writes the
+ones above to `screenshots/readme/` (refreshed for v1.4.0, in English, the default language), and
+the layout audits write many more to `screenshots/`.
 
 ## Features
 
+Screen labels below are quoted from the Dutch interface, where most of them were first built;
+the English interface (the default) uses the same structure, e.g. **Beheer** is **Settings** and
+**Winkelstand** is **shopping mode**.
+
 **Shopping list**
 
-- Large “Wat hebben we nodig?” input. Add with Enter or the + button. Focus stays in the field
+- Large “What do we need?” (“Wat hebben we nodig?”) input. Add with Enter or the + button. Focus stays in the field
   for fast consecutive entry.
-- Quantities and units are understood while typing: `2 melk`, `500 g gehakt`,
-  `1,5 kg aardappelen`, `eieren x10`.
+- Quantities and units are understood while typing, in every language: `2 milk`, `500 g mince`,
+  `1.5 kg potatoes`, `eggs x10`, `3 Flaschen Wasser`, `1,5 kg aardappelen`.
 - Live autocomplete from every product you ever added, ranked by frequency, recency and favourites.
 - Duplicates are prevented, ignoring case and whitespace (` HALFVOLLE   melk` = `Halfvolle melk`).
 - Tap a row to tick it off. Completed items turn grey and move into a collapsible section. Tap
   again to put an item back on the list; it then counts as newly added.
-- Always-visible sort control: **Nieuwste ↓ · Oudste ↑ · A–Z** (Dutch collation). The choice is
+- Always-visible sort control: **Nieuwste ↓ · Oudste ↑ · A–Z** (case- and accent-insensitive). The choice is
   remembered per device.
 - Optional grouping by category, in a category order you set (e.g. the walking route of your
   supermarket).
@@ -99,7 +104,7 @@ Screenshots are produced by the Playwright suite (`npm run test:e2e` writes them
 - CSV export of purchases, products and statistics, or everything as a ZIP. CSV import of
   products and purchase history.
 - Every import shows a preview first, validates the whole file, detects duplicates, runs in one
-  transaction and reports the result in plain Dutch. See [docs/IMPORT-EXPORT.md](docs/IMPORT-EXPORT.md).
+  transaction and reports the result in plain language. See [docs/IMPORT-EXPORT.md](docs/IMPORT-EXPORT.md).
 - **AI-suggesties**: analyse your export with ChatGPT, Claude or Python and import the result.
   Suggestions are shown separately from the local predictions, accepted or dismissed with one
   tap, and never touch the list or history by themselves. See
@@ -107,6 +112,17 @@ Screenshots are produced by the Playwright suite (`npm run test:e2e` writes them
 - **AI-functies tonen** (Beheer → Functies): one switch for the whole household. Off hides
   every AI feature (AI-suggesties, AI import, AI-opdracht and their explanations) on all
   devices; nothing is deleted, and switching it on brings everything back. On by default.
+
+**Five languages**
+
+- Settings → Features → **Language**: English (default), Nederlands, Deutsch, Français, Español.
+  One choice for the whole household; every phone switches live, also offline-queued. Screens,
+  messages from the server, import reports, dates and numbers, the installed app's name and the
+  AI prompt follow it. Names you typed stay as they are; the seeded list and categories and the
+  units are shown translated. CSV and backup formats don't change. See
+  [docs/SYNC.md](docs/SYNC.md#household-settings-v13-language-since-v14).
+- Upgrading from 1.3 or older switches the app to English once: pick **Nederlands** in
+  Settings → Features.
 
 **One accent color for the whole app**
 
@@ -267,9 +283,10 @@ private option is `tailscale serve`. See [docs/DOCKHAND.md](docs/DOCKHAND.md#5-h
 
 ## Releases
 
-Releases are published from the terminal with `bash scripts/release.sh vX.Y.Z` after the release
-PR is merged and CI is green; deployment in Dockhand is a separate step. See
-[docs/RELEASE.md](docs/RELEASE.md).
+Merge the release PR → **Actions → Release → Run workflow** with the version (it waits for CI
+on that commit, then tags and publishes the GitHub Release with the changelog notes) → set
+`APP_VERSION` in Dockhand → **Pull & redeploy**. `bash scripts/release.sh vX.Y.Z` does the same
+from a terminal. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Security model
 

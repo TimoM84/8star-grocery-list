@@ -4,6 +4,8 @@
  * metadata (EXIF location, camera details). The server validates and strips again.
  */
 
+import { m } from './i18n';
+
 export const PHOTO_MAX_EDGE = 1600;
 export const PHOTO_QUALITY = 0.82;
 /** Refuse absurd inputs before decoding them. */
@@ -14,14 +16,14 @@ const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/
 export class PhotoError extends Error {}
 
 export async function preparePhoto(file: Blob): Promise<Blob> {
-	if (file.size > PHOTO_MAX_INPUT_BYTES) throw new PhotoError('Deze foto is te groot.');
+	if (file.size > PHOTO_MAX_INPUT_BYTES) throw new PhotoError(m.photo.tooLarge);
 	if (!ACCEPTED.includes(file.type) || file.type === 'image/svg+xml')
-		throw new PhotoError('Kies een foto (JPEG, PNG of WebP).');
+		throw new PhotoError(m.photo.wrongType);
 	let bitmap: ImageBitmap;
 	try {
 		bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
 	} catch {
-		throw new PhotoError('Deze foto kan niet worden gelezen.');
+		throw new PhotoError(m.photo.unreadable);
 	}
 	const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
 	const width = Math.max(1, Math.round(bitmap.width * scale));
@@ -30,7 +32,7 @@ export async function preparePhoto(file: Blob): Promise<Blob> {
 	canvas.width = width;
 	canvas.height = height;
 	const ctx = canvas.getContext('2d');
-	if (!ctx) throw new PhotoError('Foto verwerken lukt niet op dit apparaat.');
+	if (!ctx) throw new PhotoError(m.photo.cannotProcess);
 	ctx.fillStyle = '#fff';
 	ctx.fillRect(0, 0, width, height);
 	ctx.drawImage(bitmap, 0, 0, width, height);
@@ -38,6 +40,6 @@ export async function preparePhoto(file: Blob): Promise<Blob> {
 	const blob = await new Promise<Blob | null>((resolve) =>
 		canvas.toBlob(resolve, 'image/jpeg', PHOTO_QUALITY)
 	);
-	if (!blob) throw new PhotoError('Foto verwerken lukt niet op dit apparaat.');
+	if (!blob) throw new PhotoError(m.photo.cannotProcess);
 	return blob;
 }

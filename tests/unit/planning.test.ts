@@ -37,7 +37,7 @@ function snap(): Snapshot {
 		snoozes: [],
 		rounds: [],
 		claims: [],
-		settings: { aiEnabled: true }
+		settings: { aiEnabled: true, language: 'nl' }
 	};
 	const melk = newProduct('melk', 'Melk', NOW);
 	const shampoo = newProduct('shampoo', 'Shampoo', NOW);
