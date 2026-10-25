@@ -24,12 +24,20 @@ WORKDIR /app
 COPY . .
 ARG BUILD_ID=""
 ENV BUILD_ID=${BUILD_ID}
+# The image tag, the Git tag and package.json must name the same version (see compose.yaml).
+ARG APP_VERSION=""
+RUN PKG_VERSION="$(node -p 'require("./package.json").version')"; \
+	if [ -n "$APP_VERSION" ] && [ "$APP_VERSION" != "$PKG_VERSION" ]; then \
+		echo "APP_VERSION is $APP_VERSION but this source is version $PKG_VERSION." \
+			"Set APP_VERSION to a released version (the Git tag v<APP_VERSION> is built)." >&2; \
+		exit 1; \
+	fi
 RUN npm run build \
 	&& npm prune --omit=dev --no-audit --no-fund
 
 # ---------- 3. runtime ----------
 FROM node:22-bookworm-slim AS runtime
-ARG APP_VERSION=1.3.0
+ARG APP_VERSION=1.4.0
 LABEL org.opencontainers.image.title="8star Grocery List" \
 	org.opencontainers.image.version="${APP_VERSION}" \
 	org.opencontainers.image.source="https://github.com/TimoM84/8star-grocery-list"

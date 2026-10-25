@@ -481,7 +481,7 @@
 				<h2 id="maybe-title" class="flex-1 text-sm font-semibold text-accent">{m.list.maybe}</h2>
 				<a
 					href="/suggesties"
-					class="-my-2 flex min-h-12 items-center px-2 text-sm font-semibold text-accent"
+					class="-my-2 flex min-h-12 min-w-12 items-center justify-center px-2 text-sm font-semibold text-accent"
 					>{m.list.all}</a
 				>
 			</div>

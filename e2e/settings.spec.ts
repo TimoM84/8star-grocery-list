@@ -72,7 +72,7 @@ test('AI features can be hidden and shown again from Beheer, on every device, wi
 
 	// Part of the JSON export.
 	const exported = await (await page.request.get('/api/export?format=json')).json();
-	expect(exported.data.settings).toEqual({ aiEnabled: false });
+	expect(exported.data.settings).toEqual({ aiEnabled: false, language: 'nl' });
 
 	// Switching back on brings the kept suggestion back.
 	await page.goto('/beheer');

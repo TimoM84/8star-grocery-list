@@ -1,0 +1,74 @@
+# 8star Grocery List — Compose for Timo's Dockhand stack (paste into Dockhand).
+#
+# Updating: publish a release (Actions → Release), set the stack variable APP_VERSION to that
+# version (e.g. 1.4.0, without "v"), then Pull & redeploy. APP_VERSION picks the source (Git tag
+# v<APP_VERSION>), the image tag and the build argument, so they can never disagree. An unreleased
+# version fails the build ("repository does not contain ref") and the running app stays as it is.
+name: 8star-grocery
+
+services:
+  app:
+    image: 8star-grocery-list:${APP_VERSION:?Set APP_VERSION to a released version, e.g. 1.4.0}
+
+    build:
+      context: https://github.com/TimoM84/8star-grocery-list.git#v${APP_VERSION:?Set APP_VERSION to a released version, e.g. 1.4.0}
+      args:
+        APP_VERSION: ${APP_VERSION:?Set APP_VERSION to a released version, e.g. 1.4.0}
+
+    pull_policy: build
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+
+    ports:
+      - '192.168.2.229:3008:3000'
+
+    environment:
+      TZ: Europe/Amsterdam
+      NODE_ENV: production
+
+      # Accent colour of the whole app (applied at runtime; recreate the container to change it)
+      APP_PRIMARY_COLOR: '#2563EB'
+
+      # Maximum request size, for importing backups with photos
+      BODY_SIZE_LIMIT: '100M'
+
+      # Automatic SQLite backups
+      BACKUP_INTERVAL_HOURS: '24'
+      BACKUP_KEEP: '14'
+
+      # Reverse proxy (optional)
+      ORIGIN: ''
+      PROTOCOL_HEADER: ''
+      HOST_HEADER: ''
+
+    volumes:
+      - grocery-data:/data
+
+    read_only: true
+
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    healthcheck:
+      test: ['CMD', 'node', 'scripts/healthcheck.mjs']
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+volumes:
+  grocery-data:
+    name: 8star-grocery-data

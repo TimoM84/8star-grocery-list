@@ -38,8 +38,8 @@ test('a fresh install is English; the language picked in Beheer applies live to 
 	await expect(page.getByTestId('nav-beheer')).toContainText('Settings');
 
 	await addItems(page, '2 bottles cola', '1.5 kg potatoes');
-	await expect(row(page, 'cola').getByTestId('item-qty')).toHaveText('2 bottles');
-	await expect(row(page, 'potatoes').getByTestId('item-qty')).toHaveText('1.5 kg');
+	await expect(row(page, 'Cola').getByTestId('item-qty')).toHaveText('2 bottles');
+	await expect(row(page, 'Potatoes').getByTestId('item-qty')).toHaveText('1.5 kg');
 	await waitForSync(page);
 
 	const other = await device(browser, baseURL!);
@@ -49,7 +49,9 @@ test('a fresh install is English; the language picked in Beheer applies live to 
 	const picker = page.getByTestId('setting-language');
 	await expect(picker.getByRole('radio', { checked: true })).toHaveText('English');
 	await page.getByTestId('language-nl').click();
-	await expect(page.getByTestId('toast')).toContainText('Taal gewijzigd naar Nederlands');
+	await expect(page.getByTestId('toast')).toContainText(
+		'Taal op alle apparaten gewijzigd naar Nederlands'
+	);
 	await expect(page.getByTestId('language-nl')).toHaveAttribute('aria-checked', 'true');
 	await expect(picker).toContainText('Taal · Language');
 	await expect(page.locator('html')).toHaveAttribute('lang', 'nl');
@@ -57,18 +59,18 @@ test('a fresh install is English; the language picked in Beheer applies live to 
 	// The other device follows without a reload, including seeded names and units.
 	await expect(other.getByTestId('nav-lijst')).toContainText('Lijst');
 	await expect(other.getByTestId('page-title')).toHaveText('Boodschappen');
-	await expect(row(other, 'cola').getByTestId('item-qty')).toHaveText('2 fles');
-	await expect(row(other, 'potatoes').getByTestId('item-qty')).toHaveText('1,5 kg');
+	await expect(row(other, 'Cola').getByTestId('item-qty')).toHaveText('2 fles');
+	await expect(row(other, 'Potatoes').getByTestId('item-qty')).toHaveText('1,5 kg');
 
 	await page.getByTestId('language-de').click();
 	await expect(other.getByTestId('page-title')).toHaveText('Einkäufe');
-	await expect(row(other, 'cola').getByTestId('item-qty')).toHaveText('2 Flaschen');
+	await expect(row(other, 'Cola').getByTestId('item-qty')).toHaveText('2 Flaschen');
 	await expect(other.getByTestId('add-input')).toHaveAttribute('placeholder', 'Was brauchen wir?');
 
 	// Typed names never change, and the choice survives a reload (also before the first sync).
 	await other.reload();
 	await expect(other.getByTestId('nav-beheer')).toContainText('Verwaltung');
-	await expect(row(other, 'potatoes')).toBeVisible();
+	await expect(row(other, 'Potatoes')).toBeVisible();
 
 	// The server shell and manifest follow too.
 	const html = await (await page.request.get('/')).text();

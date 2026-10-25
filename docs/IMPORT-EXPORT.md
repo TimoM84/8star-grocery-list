@@ -30,7 +30,8 @@ Other CSV datasets: `type=lists`, `type=categories`, `type=list-items`.
 missing ones the product simply has no photo (the report says how many).
 ² CSV imports add products and purchase history; they are not a full restore.
 
-**Household settings** (v1.3, `data.settings`, e.g. `{ "aiEnabled": false }`) are exported and
+**Household settings** (`data.settings`, e.g. `{ "aiEnabled": false, "language": "nl" }`;
+`aiEnabled` since v1.3, `language` since v1.4) are exported and
 restored by **Alles vervangen**. Files without settings (older exports) keep the current
 settings. **Samenvoegen** never changes settings; the report says so when the file's setting
 differs.
@@ -41,7 +42,9 @@ the sync operation log and id aliases. A restore ends any running round.
 
 CSV files are UTF-8 with BOM, use `;` as separator and a decimal comma, so they open directly in
 Dutch Excel. In Python: `pd.read_csv("purchases.csv", sep=";", decimal=",")`. All timestamps are
-ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`).
+ISO 8601 in UTC (`2026-10-24T08:30:00.000Z`). The file formats don't depend on the household
+language: CSV column names stay Dutch (the importer also accepts the English names listed
+below), and so do the stored unit codes.
 
 ### Full backup ZIP (`8star-grocery-backup`, version 1)
 
@@ -186,7 +189,7 @@ no notes, no photo).
 				"resolvedAt": null
 			}
 		],
-		"settings": { "aiEnabled": true } // v1.3, optional: household settings
+		"settings": { "aiEnabled": true, "language": "en" } // optional: household settings
 	},
 	"statistics": [/* derived per product; informational, ignored on import */]
 }
@@ -217,8 +220,9 @@ changed at that point. Then choose:
 
 Every import is validated completely before anything is written. It runs in a single SQLite
 transaction and is rolled back entirely on any error. The preview runs the same code and then
-rolls back, so it always matches the real result. Results are shown as readable Dutch lines
-(e.g. "12 aankopen toegevoegd, 3 dubbel (overgeslagen)") with warnings and per-line errors.
+rolls back, so it always matches the real result. Results are shown as readable lines in the
+household language (e.g. "12 purchases added, 3 duplicate (skipped)") with warnings and
+per-line errors.
 
 ### Duplicate detection and merge rules
 

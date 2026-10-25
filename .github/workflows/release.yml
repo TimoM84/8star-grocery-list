@@ -1,0 +1,76 @@
+name: Release
+
+# Actions → Release → Run workflow → type the version (e.g. 1.4.0). Publishes the tag v1.4.0 and a
+# GitHub Release with the notes from CHANGELOG.md for the current commit of the default branch,
+# after CI passed for exactly that commit. It never deploys anything (see docs/RELEASE.md).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.4.0 (must match package.json and CHANGELOG.md)'
+        required: true
+        type: string
+
+# One release at a time; a second run waits instead of racing for the same tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    # scripts/release.sh ignores this job's own check run by this name (IGNORE_CHECK).
+    name: Publish release
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write # create the tag and the release
+      checks: read # read the CI results of the commit
+    steps:
+      - name: Only from the default branch
+        if: github.ref_name != github.event.repository.default_branch
+        env:
+          REF: ${{ github.ref_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          echo "::error::Start the Release workflow from the default branch ($DEFAULT), not $REF."
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          # The exact commit the workflow was started on; release.sh refuses if the default
+          # branch moved on since (start the workflow again in that case).
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Put the checkout on the default branch
+        env:
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: git switch -C "$DEFAULT"
+
+      - name: Check, wait for CI, tag and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          IGNORE_CHECK: Publish release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash scripts/release.sh "v${VERSION#v}" --yes --wait-for-ci 60
+
+      - name: Summary
+        if: success()
+        env:
+          VERSION: ${{ inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          V="${VERSION#v}"
+          {
+            echo "### Released v$V"
+            echo
+            echo "https://github.com/$REPO/releases/tag/v$V"
+            echo
+            echo "Next, in Dockhand: set \`APP_VERSION=$V\` and choose **Pull & redeploy**."
+          } >> "$GITHUB_STEP_SUMMARY"

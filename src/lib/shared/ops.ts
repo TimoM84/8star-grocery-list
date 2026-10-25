@@ -10,9 +10,10 @@ import { LANGUAGES, type Language } from './i18n';
 
 /**
  * Sync protocol version. 1 = v1.0/v1.1, 2 = v1.2 (intent ops, rounds, bundles…), 3 = v1.3
- * (shared settings). Servers keep accepting every op type of older protocols; see docs/SYNC.md.
+ * (shared settings), 4 = v1.4 (household language). Servers keep accepting every op type of
+ * older protocols; see docs/SYNC.md.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export interface ItemChanges {
 	quantity?: number | null;
