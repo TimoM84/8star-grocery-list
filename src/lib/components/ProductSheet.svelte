@@ -2,6 +2,7 @@
 	import Sheet from './Sheet.svelte';
 	import Icon from './Icon.svelte';
 	import CategoryChips from './CategoryChips.svelte';
+	import ProductMemory from './ProductMemory.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { computeStats, MIN_HISTORY } from '$lib/shared/stats';
@@ -131,6 +132,8 @@
 					Favoriet
 				</button>
 			</div>
+
+			<ProductMemory {product} />
 
 			<dl class="grid grid-cols-2 gap-2" data-testid="product-stats">
 				{#each [['Keer gekocht', String(stats.purchaseCount)], ['Laatst gekocht', relativeDay(stats.lastPurchasedAt, app.now)], ['Gem. interval', formatInterval(stats.avgIntervalDays)], ['Frequentie', formatPerMonth(stats.perMonth)], ['Volgende keer', stats.nextEstimatedAt ? relativeDay(stats.nextEstimatedAt, app.now) : '—'], ['Eerst toegevoegd', formatDate(product.createdAt, app.now)]] as [label, value] (label)}

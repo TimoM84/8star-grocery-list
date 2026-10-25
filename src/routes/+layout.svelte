@@ -9,6 +9,11 @@
 	import ConfirmHost from '$lib/components/ConfirmHost.svelte';
 	import ItemSheet from '$lib/components/ItemSheet.svelte';
 	import ProductSheet from '$lib/components/ProductSheet.svelte';
+	import AddPromptSheet from '$lib/components/AddPromptSheet.svelte';
+	import BulkAddSheet from '$lib/components/BulkAddSheet.svelte';
+	import PhotoSheet from '$lib/components/PhotoSheet.svelte';
+	import BundleSheet from '$lib/components/BundleSheet.svelte';
+	import BundleAddSheet from '$lib/components/BundleAddSheet.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -95,4 +100,9 @@
 <ToastHost />
 <ItemSheet />
 <ProductSheet />
+<AddPromptSheet />
+<BulkAddSheet />
+<BundleSheet />
+<BundleAddSheet />
+<PhotoSheet />
 <ConfirmHost />

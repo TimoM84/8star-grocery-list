@@ -9,6 +9,13 @@
 
 	const step = $derived(quantityStep(unit));
 	let text = $state('');
+	/** Most used units first; the rest stays one tap away. */
+	const COMMON: (string | null)[] = [null, 'g', 'kg', 'l', 'pak'];
+	const OTHER = UNITS.filter((u) => !COMMON.includes(u));
+	let showAll = $state(false);
+	const units = $derived(
+		showAll || (unit !== null && !COMMON.includes(unit)) ? [...COMMON, ...OTHER] : COMMON
+	);
 
 	$effect(() => {
 		const formatted = quantity === null ? '' : String(quantity).replace('.', ',');
@@ -72,7 +79,7 @@
 		>
 	</div>
 	<div class="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Eenheid">
-		{#each [null, ...UNITS] as u (u ?? 'none')}
+		{#each units as u (u ?? 'none')}
 			<button
 				type="button"
 				role="radio"
@@ -86,5 +93,14 @@
 				{u ?? 'geen'}
 			</button>
 		{/each}
+		{#if units.length < COMMON.length + OTHER.length}
+			<button
+				type="button"
+				class="min-h-12 rounded-full px-3.5 text-base font-semibold text-accent active:bg-surface-2"
+				aria-expanded="false"
+				onclick={() => (showAll = true)}
+				data-testid="unit-more">Meer eenheden</button
+			>
+		{/if}
 	</div>
 </fieldset>

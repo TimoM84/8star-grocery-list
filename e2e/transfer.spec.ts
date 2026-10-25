@@ -219,9 +219,14 @@ test('AI recommendations: import, accept with one tap, dismiss, undo and duplica
 	const cards = page.getByTestId('ai-card');
 	await expect(cards).toHaveCount(2);
 	const melk = page.locator('[data-testid=ai-card][data-name="Halfvolle melk"]');
-	await expect(melk.getByTestId('ai-meta')).toContainText('2 l');
-	await expect(melk.getByTestId('ai-meta')).toContainText('82% zeker');
+	await expect(melk.getByTestId('ai-qty')).toHaveText('2 l');
+	await expect(melk.getByTestId('ai-meta')).toContainText('inschatting: waarschijnlijk');
 	await expect(melk.getByTestId('ai-reasoning')).toContainText('wekelijks');
+	// Details (full reasoning, stated confidence as an estimate) are one tap away.
+	await expect(melk.getByTestId('ai-details')).toHaveCount(0);
+	await melk.getByTestId('ai-more').click();
+	await expect(melk.getByTestId('ai-details')).toContainText('82%');
+	await expect(melk.getByTestId('ai-details')).toContainText('geen zekerheid');
 
 	// Nothing was added to the list automatically.
 	expect(

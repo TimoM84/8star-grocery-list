@@ -36,7 +36,11 @@ test('prevents duplicates ignoring case and whitespace', async ({ page }) => {
 	await addItems(page, 'Halfvolle melk');
 	await page.getByTestId('add-input').fill('  HALFVOLLE   melk ');
 	await page.getByTestId('add-input').press('Enter');
-	await expect(page.getByTestId('toast')).toContainText('staat al op de lijst');
+	// Never silently changed: the user gets an explicit choice.
+	await expect(page.getByTestId('add-prompt')).toBeVisible();
+	await expect(page.getByTestId('add-prompt-existing')).toContainText('Staat er al op');
+	await page.getByTestId('add-prompt-cancel').click();
+	await expect(page.getByTestId('add-prompt')).toBeHidden();
 	await expect(page.locator('[data-testid=item-row]')).toHaveCount(1);
 	await waitForSync(page);
 	const snap = await (await page.request.get('/api/snapshot')).json();

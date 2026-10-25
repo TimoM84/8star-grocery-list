@@ -5,8 +5,18 @@
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 
-	let { view, detail, extra }: { view: ProductView; detail?: string; extra?: Snippet } = $props();
-	const onList = $derived(view.status === 'active');
+	let {
+		view,
+		detail,
+		extra,
+		listId
+	}: { view: ProductView; detail?: string; extra?: Snippet; listId?: string } = $props();
+	/** Target list for the quick add (defaults to the current list). */
+	const target = $derived(listId ?? app.listId);
+	const onList = $derived(
+		listId ? app.itemFor(view.product.id, listId)?.status === 'active' : view.status === 'active'
+	);
+	const targetName = $derived(listId && listId !== app.listId ? app.list(listId)?.name : null);
 </script>
 
 <div
@@ -42,10 +52,10 @@
 			? 'text-accent'
 			: 'bg-accent-soft text-accent active:bg-accent/20'}"
 		aria-label={onList
-			? `${view.product.name} staat op de lijst`
-			: `${view.product.name} op de lijst zetten`}
+			? `${view.product.name} staat op ${targetName ?? 'de lijst'}`
+			: `${view.product.name} op ${targetName ?? 'de lijst'} zetten`}
 		disabled={onList}
-		onclick={() => app.addProduct(view.product)}
+		onclick={() => app.addProduct(view.product, target)}
 		data-testid="product-quick-add"
 	>
 		<Icon name={onList ? 'check' : 'plus'} size={24} stroke={2.5} />

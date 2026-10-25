@@ -1,6 +1,7 @@
 <script lang="ts">
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import OrderedEditor from '$lib/components/OrderedEditor.svelte';
+	import ListSettings from '$lib/components/ListSettings.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
@@ -36,6 +37,15 @@
 	}
 
 	let backupBusy = $state(false);
+	let deviceName = $state(app.deviceName ?? '');
+
+	const pendingText = $derived(
+		app.status.pending === 0
+			? 'Alles gedeeld'
+			: app.status.pending === 1
+				? '1 wijziging nog niet gedeeld'
+				: `${app.status.pending} wijzigingen nog niet gedeeld`
+	);
 
 	async function deleteList(id: string) {
 		const list = app.lists.find((l) => l.id === id);
@@ -107,6 +117,16 @@
 				></span>
 				<span class="flex-1 text-lg font-semibold" data-testid="sync-connection">{connLabel}</span>
 			</div>
+			{#if app.status.serverNewer}
+				<p class="rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn" data-testid="server-newer">
+					De server draait een nieuwere versie. Vernieuw de app om alles te kunnen gebruiken.
+				</p>
+			{/if}
+			<p class="text-base font-semibold" data-testid="sync-pending-text">
+				{pendingText}{app.status.pendingMedia
+					? ` · ${app.status.pendingMedia === 1 ? '1 foto wacht' : `${app.status.pendingMedia} foto’s wachten`}`
+					: ''}
+			</p>
 			<dl class="grid grid-cols-2 gap-2 text-base">
 				<div class="rounded-xl bg-surface-2 px-3 py-2">
 					<dt class="text-sm text-muted">Wachtende wijzigingen</dt>
@@ -165,6 +185,67 @@
 		</div>
 	</section>
 
+	<section aria-labelledby="device-title">
+		<h2 id="device-title" class="mb-3 text-lg font-bold">Dit apparaat</h2>
+		<div class="space-y-4 rounded-2xl bg-surface p-4 shadow-card" data-testid="device-card">
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					app.setDeviceName(deviceName);
+					toasts.show(app.deviceName ? `Apparaatnaam: ${app.deviceName}` : 'Apparaatnaam gewist');
+				}}
+			>
+				<label for="device-name" class="mb-1.5 block text-sm font-semibold text-muted"
+					>Naam in de winkelronde (optioneel)</label
+				>
+				<div class="flex gap-2">
+					<input
+						id="device-name"
+						bind:value={deviceName}
+						maxlength="40"
+						placeholder="bijv. Timo"
+						class="h-12 min-w-0 flex-1 rounded-2xl border border-line bg-bg px-4 text-base outline-none focus:border-accent"
+						data-testid="device-name"
+					/>
+					<button
+						type="submit"
+						class="min-h-12 rounded-2xl bg-surface-2 px-4 font-semibold active:bg-surface-3"
+						data-testid="device-name-save">Opslaan</button
+					>
+				</div>
+				<p class="mt-1 text-sm text-faint">
+					Anderen zien dan “{app.deviceName ?? 'Timo'} doet boodschappen”. Geen account, geen locatie:
+					alleen deze naam en een willekeurige apparaat-id.
+				</p>
+			</form>
+			{#each [{ id: 'share', label: 'Winkelronde delen', hint: 'Bij “Ik ga winkelen” zien anderen dat je boodschappen doet en kun je samen afvinken.', on: app.shareRound, set: (v: boolean) => app.setShareRound(v) }, { id: 'wake', label: 'Scherm aan houden in winkelstand', hint: 'Alleen terwijl de winkelstand open en zichtbaar is.', on: app.wakeLockEnabled, set: (v: boolean) => app.setWakeLock(v) }] as t (t.id)}
+				<button
+					type="button"
+					role="switch"
+					aria-checked={t.on}
+					class="flex min-h-12 w-full items-center gap-3 text-left"
+					onclick={() => t.set(!t.on)}
+					data-testid="setting-{t.id}"
+				>
+					<span class="min-w-0 flex-1">
+						<span class="block font-semibold">{t.label}</span>
+						<span class="block text-sm text-muted">{t.hint}</span>
+					</span>
+					<span
+						class="relative h-8 w-14 shrink-0 rounded-full transition-colors {t.on
+							? 'bg-accent'
+							: 'bg-surface-3'}"
+						><span
+							class="absolute top-1 h-6 w-6 rounded-full bg-surface shadow transition-all {t.on
+								? 'left-7'
+								: 'left-1'}"
+						></span></span
+					>
+				</button>
+			{/each}
+		</div>
+	</section>
+
 	<section aria-labelledby="lists-title">
 		<h2 id="lists-title" class="mb-1 text-lg font-bold">Lijsten</h2>
 		<p class="mb-3 text-sm text-muted">
@@ -190,12 +271,19 @@
 			ondelete={deleteList}
 			testid="lists"
 		/>
+		<h3 class="mt-5 mb-2 font-semibold">Soort lijst en looproute</h3>
+		<div class="space-y-2">
+			{#each app.lists as l (l.id)}
+				<ListSettings list={l} />
+			{/each}
+		</div>
 	</section>
 
 	<section aria-labelledby="cats-title">
 		<h2 id="cats-title" class="mb-1 text-lg font-bold">Categorieën</h2>
 		<p class="mb-3 text-sm text-muted">
-			De volgorde bepaalt de indeling bij “Per categorie” — zet ze in de looproute van je winkel.
+			De standaardvolgorde bij “Per categorie”. Per lijst kun je hierboven een eigen looproute
+			instellen.
 		</p>
 		<OrderedEditor
 			entries={categories}

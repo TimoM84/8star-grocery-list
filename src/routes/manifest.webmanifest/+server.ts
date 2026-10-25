@@ -25,6 +25,12 @@ export const GET: RequestHandler = () => {
 			{ src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 			{ src: '/icons/maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' }
 		],
+		// Web Share Target (Android/Chromium, installed PWA only): shared text opens a preview.
+		share_target: {
+			action: '/delen',
+			method: 'GET',
+			params: { title: 'title', text: 'text', url: 'url' }
+		},
 		shortcuts: [
 			{
 				name: 'Suggesties',

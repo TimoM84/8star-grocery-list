@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs';
-import { addItems, freshApp, postOps, seedPurchases, waitForSync } from './helpers';
+import { addItems, audit, freshApp, postOps, seedPurchases, waitForSync } from './helpers';
 
 /**
  * Mobile layout audit. Screenshots land in screenshots/ for manual inspection; the assertions
@@ -83,100 +83,6 @@ async function seed(page: Page) {
 	expect((await res.json()).ok).toBe(true);
 	await page.reload();
 	await expect(page.locator('[data-testid=item-row]').first()).toBeVisible();
-}
-
-interface Problem {
-	kind: string;
-	detail: string;
-}
-
-/** Collects layout problems from the live DOM. */
-async function audit(page: Page): Promise<Problem[]> {
-	return page.evaluate(() => {
-		const problems: { kind: string; detail: string }[] = [];
-		const vw = document.documentElement.clientWidth;
-		const describe = (el: Element) =>
-			`${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''} "${(el.textContent ?? el.getAttribute('aria-label') ?? '').trim().slice(0, 40)}"`;
-		const visible = (el: Element) => {
-			const r = el.getBoundingClientRect();
-			const s = getComputedStyle(el);
-			return (
-				r.width > 0 &&
-				r.height > 0 &&
-				s.visibility !== 'hidden' &&
-				s.display !== 'none' &&
-				!el.closest('[inert]')
-			);
-		};
-
-		if (document.documentElement.scrollWidth > vw + 1)
-			problems.push({
-				kind: 'horizontal-scroll',
-				detail: `${document.documentElement.scrollWidth} > ${vw}`
-			});
-
-		for (const el of document.querySelectorAll('body *')) {
-			if (
-				!visible(el) ||
-				el.closest('svg') ||
-				el.classList.contains('sr-only') ||
-				el.id === 'svelte-announcer'
-			)
-				continue;
-			const r = el.getBoundingClientRect();
-			if (r.right > vw + 1 || r.left < -1)
-				problems.push({ kind: 'offscreen-x', detail: describe(el) });
-			const s = getComputedStyle(el);
-			if (
-				(s.overflowX === 'hidden' || s.overflowX === 'clip') &&
-				el.scrollWidth > el.clientWidth + 1 &&
-				el.textContent?.trim()
-			)
-				problems.push({ kind: 'clipped', detail: describe(el) });
-		}
-
-		const targets = [
-			...document.querySelectorAll('button, a[href], input, [role=radio], [role=tab]')
-		].filter(
-			(el) =>
-				visible(el) &&
-				!(el as HTMLElement).hasAttribute('tabindex') &&
-				!el.classList.contains('sr-only') &&
-				!el.closest('[aria-hidden=true]')
-		);
-		for (const el of targets) {
-			const r = el.getBoundingClientRect();
-			if (el.tagName !== 'INPUT' && el.scrollWidth > el.clientWidth + 1)
-				problems.push({ kind: 'content-overflow', detail: describe(el) });
-			if (r.height < 47.5 || r.width < 47.5)
-				problems.push({
-					kind: 'small-target',
-					detail: `${describe(el)} ${Math.round(r.width)}x${Math.round(r.height)}`
-				});
-		}
-		// Interactive elements must not overlap each other (fixed bars are allowed over content).
-		const inFlow = targets.filter(
-			(el) =>
-				!el.closest('nav, header, [aria-live], [role=dialog], [role=alertdialog], [role=listbox]')
-		);
-		for (let i = 0; i < inFlow.length; i++) {
-			for (let j = i + 1; j < inFlow.length; j++) {
-				const a = inFlow[i].getBoundingClientRect();
-				const b = inFlow[j].getBoundingClientRect();
-				if (inFlow[i].contains(inFlow[j]) || inFlow[j].contains(inFlow[i])) continue;
-				const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
-				const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-				if (ox > 1 && oy > 1)
-					problems.push({
-						kind: 'overlap',
-						detail: `${describe(inFlow[i])} × ${describe(inFlow[j])}`
-					});
-			}
-		}
-		if (document.querySelector('select, [role=menu], details > summary'))
-			problems.push({ kind: 'dropdown', detail: 'select/menu element present' });
-		return problems;
-	});
 }
 
 async function expectSortVisible(page: Page) {

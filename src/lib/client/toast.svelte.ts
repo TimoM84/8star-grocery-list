@@ -5,6 +5,8 @@ export interface Toast {
 	message: string;
 	kind: 'info' | 'success' | 'warn' | 'error';
 	action?: { label: string; run: () => void };
+	/** Optional second, never-automatic suggestion (e.g. "Voorraad op genoeg"). */
+	secondary?: { label: string; run: () => void };
 	duration: number;
 }
 
@@ -20,7 +22,8 @@ class ToastState {
 			message,
 			kind: options.kind ?? 'info',
 			action: options.action,
-			duration: options.duration ?? (options.action ? 5000 : 3200)
+			secondary: options.secondary,
+			duration: options.duration ?? (options.secondary ? 7000 : options.action ? 5000 : 3200)
 		};
 		this.current = toast;
 		if (this.timer) clearTimeout(this.timer);

@@ -8,8 +8,19 @@
 	import { formatInterval, relativeDay } from '$lib/client/format';
 	import { MIN_HISTORY } from '$lib/shared/stats';
 
+	import StockControl from '$lib/components/StockControl.svelte';
+	import { ui } from '$lib/client/ui.svelte';
+	import { stockIsStale } from '$lib/shared/planning';
+
 	const favs = $derived(favorites(app.products));
 	const freq = $derived(frequent(app.products, 15));
+	const STOCK_ORDER = { out: 0, low: 1, enough: 2, unknown: 3 } as const;
+	const stock = $derived(
+		app.products
+			.filter((v) => v.product.stockStatus === 'low' || v.product.stockStatus === 'out')
+			.sort((a, b) => STOCK_ORDER[a.product.stockStatus] - STOCK_ORDER[b.product.stockStatus])
+	);
+	let stockEditing = $state<string | null>(null);
 </script>
 
 <svelte:head><title>Suggesties · 8star</title></svelte:head>
@@ -80,6 +91,104 @@
 	</section>
 
 	<AiSuggestions />
+
+	<section aria-labelledby="bundles" data-testid="bundles-section">
+		<h2 id="bundles" class="mb-1 flex items-center gap-2 text-lg font-bold">
+			<Icon name="layers" size={20} class="text-accent" /> Bundels
+		</h2>
+		<p class="mb-3 text-sm text-muted">
+			Vaste combinaties of recepten. Je ziet altijd eerst wat er op de lijst komt.
+		</p>
+		{#if app.bundles.length}
+			<ul class="mb-3 space-y-2">
+				{#each app.bundles as b (b.id)}
+					<li
+						class="flex items-stretch overflow-hidden rounded-2xl bg-surface shadow-card"
+						data-testid="bundle-row"
+						data-name={b.name}
+					>
+						<button
+							type="button"
+							class="flex min-h-14 min-w-0 flex-1 flex-col justify-center py-2 pl-4 text-left active:bg-surface-2"
+							onclick={() => ui.openSheet('bundle', { bundleId: b.id })}
+							aria-label="Bundel {b.name} bewerken"
+							data-testid="bundle-edit"
+						>
+							<span class="font-medium [overflow-wrap:anywhere]">{b.name}</span>
+							<span class="text-sm text-muted"
+								>{b.lines.length === 1 ? '1 product' : `${b.lines.length} producten`}{b.servings
+									? ` · voor ${b.servings}`
+									: ''}</span
+							>
+						</button>
+						<button
+							type="button"
+							class="flex min-h-14 shrink-0 items-center gap-1.5 bg-accent-soft px-4 font-semibold text-accent active:bg-accent/20"
+							onclick={() => ui.openSheet('bundle-add', { bundleId: b.id })}
+							data-testid="bundle-use"
+						>
+							<Icon name="plus" size={20} stroke={2.5} /> Toevoegen
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		<button
+			type="button"
+			class="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-line bg-surface font-semibold active:bg-surface-2"
+			onclick={() => ui.openSheet('bundle', {})}
+			data-testid="bundle-new"
+		>
+			<Icon name="plus" size={20} class="text-accent" /> Nieuwe bundel
+		</button>
+	</section>
+
+	<section aria-labelledby="stock" data-testid="stock-section">
+		<h2 id="stock" class="mb-1 flex items-center gap-2 text-lg font-bold">
+			<Icon name="box" size={20} class="text-accent" /> Voorraad
+		</h2>
+		<p class="mb-3 text-sm text-muted">
+			Wat jullie als bijna op of op hebben gemarkeerd. Zet de voorraad via een product (tik op de
+			naam).
+		</p>
+		{#if stock.length === 0}
+			<p class="rounded-2xl bg-surface-2 px-4 py-4 text-muted" data-testid="stock-empty">
+				Niets gemarkeerd als bijna op.
+			</p>
+		{:else}
+			<ul class="space-y-2">
+				{#each stock as s (s.product.id)}
+					{@const stale = stockIsStale(s.product, app.now)}
+					<li>
+						<ProductRow
+							view={s}
+							listId={app.targetList(s.product)}
+							detail="{s.product.stockStatus === 'out' ? 'Op' : 'Bijna op'}{stale
+								? ' · misschien verouderd'
+								: ''} · naar {app.list(app.targetList(s.product))?.name ?? 'lijst'}"
+						>
+							{#snippet extra()}
+								<button
+									type="button"
+									class="grid w-12 shrink-0 place-items-center text-faint active:bg-surface-2"
+									aria-label="Voorraad {s.product.name} aanpassen"
+									aria-expanded={stockEditing === s.product.id}
+									onclick={() =>
+										(stockEditing = stockEditing === s.product.id ? null : s.product.id)}
+									data-testid="stock-edit"
+								>
+									<Icon name="pencil" size={20} />
+								</button>
+							{/snippet}
+						</ProductRow>
+						{#if stockEditing === s.product.id}
+							<div class="mt-2 px-1"><StockControl product={s.product} compact /></div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
 
 	<section aria-labelledby="favs" data-testid="favorites-section">
 		<h2 id="favs" class="mb-3 flex items-center gap-2 text-lg font-bold">
