@@ -94,7 +94,9 @@ docker compose exec -T app sh -c 'ls /data/backups' | grep -q 'pre-migration-v3'
 step "Container hardening and endpoints"
 [ "$(docker compose exec -T app id -u | tr -d '\r')" = 1000 ] || fail "not running as uid 1000"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$B/api/test/reset")" = 404 ] || fail "test reset reachable"
-curl -fsS "$B/" | grep -q '<html lang="nl">' || fail "shell"
+# An upgraded household starts in English (the default language) until it picks another one.
+curl -fsS "$B/" | grep -q '<html lang="en">' || fail "shell"
+curl -fsS "$B/" | grep -q '<title>8star Groceries</title>' || fail "shell title"
 curl -fsS "$B/manifest.webmanifest" | json "d['display']" | grep -qx standalone || fail "manifest"
 curl -fsS -o /dev/null "$B/icons/icon-512.png" || fail "icon"
 curl -fsS "$B/" | grep -q -- '--accent:#1d7f46' || fail "default theme missing"
