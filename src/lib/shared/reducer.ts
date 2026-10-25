@@ -699,7 +699,11 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 			s.aiRecommendations = s.aiRecommendations.filter((r) => r.id !== op.recommendationId);
 			return;
 		case 'settings.update':
-			s.settings = { ...s.settings, aiEnabled: op.aiEnabled };
+			s.settings = {
+				...s.settings,
+				...(op.aiEnabled !== undefined && { aiEnabled: op.aiEnabled }),
+				...(op.language !== undefined && { language: op.language })
+			};
 			return;
 		case 'undo':
 			if (op.restore) applyRestore(s, op.restore, aliases);

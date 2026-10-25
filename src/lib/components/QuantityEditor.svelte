@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import { UNITS, quantityStep } from '$lib/shared/quantity';
+	import { formatNumber } from '$lib/client/format';
+	import { m, unitLabel } from '$lib/client/i18n';
 
 	let {
 		quantity = $bindable(),
@@ -18,7 +20,7 @@
 	);
 
 	$effect(() => {
-		const formatted = quantity === null ? '' : String(quantity).replace('.', ',');
+		const formatted = quantity === null ? '' : formatNumber(quantity);
 		if (Number(text.replace(',', '.')) !== quantity || (quantity === null && text !== ''))
 			text = formatted;
 	});
@@ -36,12 +38,12 @@
 </script>
 
 <fieldset>
-	<legend class="mb-2 text-sm font-semibold text-muted">Aantal</legend>
+	<legend class="mb-2 text-sm font-semibold text-muted">{m.quantity.label}</legend>
 	<div class="flex items-center gap-2">
 		<button
 			type="button"
 			class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-surface-2 active:bg-surface-3 disabled:opacity-40"
-			aria-label="Minder"
+			aria-label={m.quantity.less}
 			disabled={quantity === null}
 			onclick={() => set((quantity ?? 0) - step)}
 			data-testid="qty-minus"
@@ -54,14 +56,14 @@
 			inputmode="decimal"
 			enterkeyhint="done"
 			placeholder="—"
-			aria-label="Aantal"
+			aria-label={m.quantity.label}
 			class="h-12 w-0 min-w-0 flex-1 rounded-2xl border border-line bg-bg text-center text-lg font-semibold outline-none focus:border-accent"
 			data-testid="qty-input"
 		/>
 		<button
 			type="button"
 			class="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-surface-2 active:bg-surface-3"
-			aria-label="Meer"
+			aria-label={m.quantity.more}
 			onclick={() => set((quantity ?? 0) + step)}
 			data-testid="qty-plus"
 		>
@@ -75,10 +77,10 @@
 				quantity = null;
 				unit = null;
 			}}
-			data-testid="qty-clear">Wissen</button
+			data-testid="qty-clear">{m.quantity.clear}</button
 		>
 	</div>
-	<div class="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Eenheid">
+	<div class="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label={m.quantity.unit}>
 		{#each units as u (u ?? 'none')}
 			<button
 				type="button"
@@ -90,7 +92,7 @@
 				onclick={() => (unit = u)}
 				data-testid="unit-{u ?? 'none'}"
 			>
-				{u ?? 'geen'}
+				{u === null ? m.quantity.noUnit : unitLabel(u)}
 			</button>
 		{/each}
 		{#if units.length < COMMON.length + OTHER.length}
@@ -99,7 +101,7 @@
 				class="min-h-12 rounded-full px-3.5 text-base font-semibold text-accent active:bg-surface-2"
 				aria-expanded="false"
 				onclick={() => (showAll = true)}
-				data-testid="unit-more">Meer eenheden</button
+				data-testid="unit-more">{m.quantity.moreUnits}</button
 			>
 		{/if}
 	</div>

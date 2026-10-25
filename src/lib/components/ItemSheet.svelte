@@ -6,7 +6,8 @@
 	import PhotoField from './PhotoField.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
-	import { formatQuantity, quantityStep } from '$lib/shared/quantity';
+	import { quantityStep } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 	import { MAX_NOTE_LENGTH } from '$lib/shared/text';
 
 	const open = $derived(ui.isOpen('item'));
@@ -106,9 +107,9 @@
 	async function remove() {
 		if (!item || !product) return;
 		const ok = await ui.confirm({
-			title: `“${product.name}” verwijderen?`,
-			message: 'Het item verdwijnt van deze lijst. De aankoopgeschiedenis blijft bewaard.',
-			confirmLabel: 'Verwijderen',
+			title: m.itemSheet.deleteTitle(product.name),
+			message: m.itemSheet.deleteMessage,
+			confirmLabel: m.common.delete,
 			danger: true
 		});
 		if (!ok) return;
@@ -120,7 +121,12 @@
 		'h-12 w-full rounded-2xl border border-line bg-bg px-4 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30';
 </script>
 
-<Sheet {open} title={product?.name ?? 'Item'} onclose={() => ui.closeSheet()} testid="item-sheet">
+<Sheet
+	{open}
+	title={product?.name ?? m.common.item}
+	onclose={() => ui.closeSheet()}
+	testid="item-sheet"
+>
 	{#if item && product}
 		{#if grocery && active}
 			<div class="mb-5 flex flex-wrap gap-2" data-testid="item-actions">
@@ -134,7 +140,8 @@
 						onclick={startPartial}
 						data-testid="action-partial"
 					>
-						<Icon name="layers" size={20} /> Deels gehaald
+						<Icon name="layers" size={20} />
+						{m.itemSheet.partial}
 					</button>
 				{/if}
 				<button
@@ -144,7 +151,7 @@
 					data-testid="action-unavailable"
 				>
 					<Icon name="ban" size={20} />
-					{item.unavailableAt === null ? 'Niet verkrijgbaar' : 'Weer te halen'}
+					{item.unavailableAt === null ? m.itemSheet.unavailable : m.itemSheet.availableAgain}
 				</button>
 				{#if canClaim}
 					<button
@@ -155,11 +162,11 @@
 					>
 						<Icon name="hand" size={20} />
 						{#if claim && claim.deviceId !== app.deviceId}
-							{claim.deviceName ?? 'Iemand anders'} pakt dit · toch ik
+							{m.itemSheet.claimTakeOver(claim.deviceName ?? m.common.someoneElse)}
 						{:else if claim}
-							Niet meer pakken
+							{m.itemSheet.release}
 						{:else}
-							Ik pak dit
+							{m.itemSheet.claim}
 						{/if}
 					</button>
 				{/if}
@@ -174,13 +181,13 @@
 					data-testid="partial-form"
 				>
 					<p class="mb-2 font-semibold">
-						Hoeveel heb je van {formatQuantity(item.quantity, item.unit)}?
+						{m.itemSheet.partialQuestion(qty(item.quantity, item.unit))}
 					</p>
 					<div class="flex items-center gap-2">
 						<button
 							type="button"
 							class="grid h-12 w-12 place-items-center rounded-2xl bg-surface active:bg-surface-2"
-							aria-label="Minder"
+							aria-label={m.quantity.less}
 							onclick={() =>
 								(partialQty = Math.max(
 									quantityStep(item.unit),
@@ -193,14 +200,14 @@
 							min="0"
 							step="any"
 							bind:value={partialQty}
-							aria-label="Gehaald aantal"
+							aria-label={m.itemSheet.partialQty}
 							class="h-12 w-0 min-w-0 flex-1 rounded-2xl border border-line bg-bg text-center text-lg font-semibold"
 							data-testid="partial-qty"
 						/>
 						<button
 							type="button"
 							class="grid h-12 w-12 place-items-center rounded-2xl bg-surface active:bg-surface-2"
-							aria-label="Meer"
+							aria-label={m.quantity.more}
 							onclick={() =>
 								(partialQty = Math.round((partialQty + quantityStep(item.unit)) * 1000) / 1000)}
 							><Icon name="plus" /></button
@@ -208,19 +215,19 @@
 					</div>
 					<p class="mt-2 text-sm text-muted">
 						{#if partialQty > 0 && partialQty < item.quantity}
-							{formatQuantity(partialQty, item.unit)} wordt als gekocht bewaard, {formatQuantity(
-								Math.round((item.quantity - partialQty) * 1000) / 1000,
-								item.unit
-							)} blijft op de lijst.
+							{m.itemSheet.partialResult(
+								qty(partialQty, item.unit),
+								qty(Math.round((item.quantity - partialQty) * 1000) / 1000, item.unit)
+							)}
 						{:else if partialQty >= item.quantity}
-							Alles gehaald: het item wordt afgevinkt.
+							{m.itemSheet.partialAll}
 						{/if}
 					</p>
 					<button
 						type="submit"
 						class="mt-3 min-h-12 w-full rounded-2xl bg-accent font-semibold text-on-accent active:bg-accent-strong disabled:opacity-50"
 						disabled={!(partialQty > 0)}
-						data-testid="partial-save">Opslaan</button
+						data-testid="partial-save">{m.common.save}</button
 					>
 				</form>
 			{/if}
@@ -234,7 +241,9 @@
 			}}
 		>
 			<div>
-				<label for="edit-name" class="mb-1.5 block text-sm font-semibold text-muted">Naam</label>
+				<label for="edit-name" class="mb-1.5 block text-sm font-semibold text-muted"
+					>{m.itemSheet.name}</label
+				>
 				<input
 					id="edit-name"
 					bind:value={name}
@@ -249,17 +258,17 @@
 
 			<div>
 				<label for="edit-note" class="mb-1.5 block text-sm font-semibold text-muted"
-					>Notitie voor deze keer</label
+					>{m.itemSheet.note}</label
 				>
 				<input
 					id="edit-note"
 					bind:value={note}
 					maxlength={MAX_NOTE_LENGTH}
-					placeholder="bijv. voor zaterdag"
+					placeholder={m.itemSheet.notePlaceholder}
 					class={input}
 					data-testid="edit-note"
 				/>
-				<p class="mt-1 text-sm text-faint">Verdwijnt als het product later opnieuw nodig is.</p>
+				<p class="mt-1 text-sm text-faint">{m.itemSheet.noteHelp}</p>
 			</div>
 
 			{#if grocery}
@@ -275,15 +284,16 @@
 						data-testid="edit-substitute"
 					>
 						<Icon name="swap" class={substituteOk ? 'text-accent' : 'text-faint'} />
-						<span class="flex-1">Ander merk of product mag</span>
-						<span class="text-sm text-muted">{substituteOk ? 'Ja' : 'Nee'}</span>
+						<span class="flex-1">{m.itemSheet.substitute}</span>
+						<span class="text-sm text-muted">{substituteOk ? m.itemSheet.yes : m.itemSheet.no}</span
+						>
 					</button>
 					{#if substituteOk}
 						<input
 							bind:value={substituteNote}
 							maxlength={MAX_NOTE_LENGTH}
-							placeholder="Toelichting (optioneel), bijv. liefst biologisch"
-							aria-label="Toelichting bij ander merk"
+							placeholder={m.itemSheet.substitutePlaceholder}
+							aria-label={m.itemSheet.substituteLabel}
 							class="{input} mt-2"
 							data-testid="edit-substitute-note"
 						/>
@@ -299,8 +309,8 @@
 				onclick={() => (more = !more)}
 				data-testid="edit-more"
 			>
-				<span class="flex-1">Meer opties</span>
-				<span class="text-sm font-normal">vaste notitie, foto, categorie, lijst</span>
+				<span class="flex-1">{m.itemSheet.moreOptions}</span>
+				<span class="text-sm font-normal">{m.itemSheet.moreOptionsHint}</span>
 				<Icon name={more ? 'chevronUp' : 'chevronDown'} class="text-faint" />
 			</button>
 
@@ -308,17 +318,17 @@
 				<div id="item-more" class="space-y-6">
 					<div>
 						<label for="edit-product-note" class="mb-1.5 block text-sm font-semibold text-muted"
-							>Vaste notitie bij product</label
+							>{m.itemSheet.productNote}</label
 						>
 						<input
 							id="edit-product-note"
 							bind:value={productNote}
 							maxlength={MAX_NOTE_LENGTH}
-							placeholder="bijv. ongezouten"
+							placeholder={m.itemSheet.productNotePlaceholder}
 							class={input}
 							data-testid="edit-product-note"
 						/>
-						<p class="mt-1 text-sm text-faint">Blijft bewaard, ook bij volgende keren.</p>
+						<p class="mt-1 text-sm text-faint">{m.itemSheet.productNoteHelp}</p>
 					</div>
 
 					<PhotoField {product} />
@@ -333,14 +343,14 @@
 						data-testid="edit-favorite"
 					>
 						<Icon name="star" filled={favorite} class={favorite ? 'text-star' : 'text-faint'} />
-						<span class="flex-1">{favorite ? 'Favoriet' : 'Markeer als favoriet'}</span>
+						<span class="flex-1">{favorite ? m.common.favorite : m.itemSheet.markFavorite}</span>
 					</button>
 
 					<CategoryChips bind:value={categoryId} />
 
 					{#if app.lists.length > 1}
 						<fieldset>
-							<legend class="mb-2 text-sm font-semibold text-muted">Lijst</legend>
+							<legend class="mb-2 text-sm font-semibold text-muted">{m.itemSheet.list}</legend>
 							<div class="flex flex-wrap gap-2">
 								{#each app.lists as l (l.id)}
 									<button
@@ -373,7 +383,8 @@
 						}}
 						data-testid="edit-open-product"
 					>
-						<Icon name="info" size={20} class="text-faint" /> Product, geschiedenis en voorraad
+						<Icon name="info" size={20} class="text-faint" />
+						{m.itemSheet.openProduct}
 					</button>
 				</div>
 			{/if}
@@ -384,7 +395,8 @@
 				onclick={remove}
 				data-testid="edit-delete"
 			>
-				<Icon name="trash" size={20} /> Verwijderen van lijst
+				<Icon name="trash" size={20} />
+				{m.itemSheet.removeFromList}
 			</button>
 		</form>
 	{/if}
@@ -393,13 +405,13 @@
 			<button
 				type="button"
 				class="min-h-12 rounded-2xl bg-surface-2 text-base font-semibold active:bg-surface-3"
-				onclick={() => ui.closeSheet()}>Annuleren</button
+				onclick={() => ui.closeSheet()}>{m.common.cancel}</button
 			>
 			<button
 				type="button"
 				class="min-h-12 rounded-2xl bg-accent text-base font-semibold text-on-accent active:bg-accent-strong"
 				onclick={save}
-				data-testid="edit-save">Opslaan</button
+				data-testid="edit-save">{m.common.save}</button
 			>
 		</div>
 	{/snippet}

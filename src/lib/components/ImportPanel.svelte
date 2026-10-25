@@ -4,6 +4,7 @@
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { uploadImport } from '$lib/client/transfer';
+	import { m } from '$lib/client/i18n';
 	import type { ImportKind, ImportReport } from '$lib/shared/transfer';
 
 	interface KindOption {
@@ -63,7 +64,7 @@
 	/** Queued changes of this device go to the server before any import. */
 	async function ensureFlushed(): Promise<boolean> {
 		if (await app.flushPending()) return true;
-		failure = `Er wachten nog ${app.status.pending} wijziging(en) op verzending. Maak eerst verbinding en probeer het opnieuw.`;
+		failure = m.importPanel.pending(app.status.pending);
 		return false;
 	}
 
@@ -98,9 +99,9 @@
 			return;
 		}
 		const ok = await ui.confirm({
-			title: 'Alle gegevens vervangen?',
-			message: `${p.report.summary.join('. ')}. Alle huidige lijsten, producten en geschiedenis op de server worden vervangen door dit bestand, voor alle apparaten. Er wordt eerst automatisch een back-up op de server gemaakt.`,
-			confirmLabel: 'Alles vervangen',
+			title: m.importPanel.replaceTitle,
+			message: m.importPanel.replaceMessage(p.report.summary.join('. ')),
+			confirmLabel: m.importPanel.replaceAll,
 			danger: true
 		});
 		if (!ok) return;
@@ -120,7 +121,7 @@
 
 <div class="space-y-4" data-testid={testid}>
 	{#if kinds.length > 1}
-		<div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Soort bestand">
+		<div class="flex flex-wrap gap-2" role="radiogroup" aria-label={m.importPanel.kind}>
 			{#each kinds as k (k.id)}
 				<button
 					type="button"
@@ -139,8 +140,8 @@
 
 	{#if offline}
 		<p class="flex items-center gap-2 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-			<Icon name="cloudOff" size={18} class="shrink-0" /> Importeren kan alleen met verbinding met de
-			server.
+			<Icon name="cloudOff" size={18} class="shrink-0" />
+			{m.importPanel.offlineHint}
 		</p>
 	{/if}
 
@@ -150,7 +151,7 @@
 			: ''}"
 	>
 		<Icon name="upload" size={20} class="text-accent" />
-		<span class="[overflow-wrap:anywhere]">{file ? file.name : 'Bestand kiezen'}</span>
+		<span class="[overflow-wrap:anywhere]">{file ? file.name : m.importPanel.choose}</span>
 		<input
 			bind:this={input}
 			type="file"
@@ -163,7 +164,7 @@
 	</label>
 
 	{#if busy}
-		<p class="text-muted" role="status">Bezig…</p>
+		<p class="text-muted" role="status">{m.importPanel.busy}</p>
 	{/if}
 	{#if failure}
 		<p
@@ -187,7 +188,7 @@
 					data-testid="{testid}-merge"
 				>
 					<Icon name="plus" size={20} />
-					{kind === 'ai' ? 'Importeren' : 'Samenvoegen'}
+					{kind === 'ai' ? m.importPanel.import : m.importPanel.merge}
 				</button>
 				{#if canReplace}
 					<button
@@ -197,16 +198,16 @@
 						onclick={replace}
 						data-testid="{testid}-replace"
 					>
-						<Icon name="refresh" size={20} /> Alles vervangen
+						<Icon name="refresh" size={20} />
+						{m.importPanel.replaceAll}
 					</button>
 				{/if}
 			</div>
 			{#if kind !== 'ai'}
 				<p class="text-sm text-muted">
-					<strong>Samenvoegen</strong> voegt alleen nieuwe gegevens toe; bestaande gegevens blijven
-					ongewijzigd.{#if canReplace}
-						<strong> Alles vervangen</strong> zet de server terug naar precies dit bestand (na een automatische
-						back-up).{/if}
+					<strong>{m.importPanel.merge}</strong>
+					{m.importPanel.mergeHelp}{#if canReplace}
+						<strong> {m.importPanel.replaceAll}</strong> {m.importPanel.replaceHelp}{/if}
 				</p>
 			{/if}
 		{/if}
@@ -217,7 +218,7 @@
 		<button
 			type="button"
 			class="min-h-12 w-full rounded-2xl bg-surface-2 font-semibold active:bg-surface-3"
-			onclick={reset}>Nog een bestand importeren</button
+			onclick={reset}>{m.importPanel.another}</button
 		>
 	{/if}
 </div>

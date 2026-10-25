@@ -2,6 +2,7 @@
 	import { ms } from '$lib/client/motion';
 	import { flip } from 'svelte/animate';
 	import Icon from './Icon.svelte';
+	import { m } from '$lib/client/i18n';
 
 	interface Entry {
 		id: string;
@@ -66,7 +67,7 @@
 						bind:value={draft}
 						maxlength="80"
 						autofocus
-						aria-label="Nieuwe naam"
+						aria-label={m.ordered.newName}
 						enterkeyhint="done"
 						onblur={commit}
 						class="h-12 min-w-0 flex-1 rounded-xl border border-accent bg-bg px-3 text-lg outline-none"
@@ -78,7 +79,7 @@
 					type="button"
 					class="flex min-h-14 min-w-0 flex-1 items-center gap-2 py-2 pl-4 text-left active:bg-surface-2"
 					onclick={() => startEdit(e)}
-					aria-label="{e.name} hernoemen"
+					aria-label={m.ordered.rename(e.name)}
 					data-testid="{testid}-name"
 				>
 					<span class="min-w-0 flex-1">
@@ -91,7 +92,7 @@
 				<button
 					type="button"
 					class="grid w-12 shrink-0 place-items-center text-muted active:bg-surface-2 disabled:opacity-25"
-					aria-label="{e.name} omhoog"
+					aria-label={m.ordered.up(e.name)}
 					disabled={i === 0}
 					onclick={() => onmove(e.id, -1)}
 					data-testid="{testid}-up"><Icon name="arrowUp" size={20} /></button
@@ -99,7 +100,7 @@
 				<button
 					type="button"
 					class="grid w-12 shrink-0 place-items-center text-muted active:bg-surface-2 disabled:opacity-25"
-					aria-label="{e.name} omlaag"
+					aria-label={m.ordered.down(e.name)}
 					disabled={i === entries.length - 1}
 					onclick={() => onmove(e.id, 1)}
 					data-testid="{testid}-down"><Icon name="arrowDown" size={20} /></button
@@ -107,7 +108,7 @@
 				<button
 					type="button"
 					class="grid w-12 shrink-0 place-items-center text-danger active:bg-danger-soft disabled:opacity-25"
-					aria-label="{e.name} verwijderen"
+					aria-label={m.ordered.remove(e.name)}
 					disabled={!canDelete(e)}
 					onclick={() => ondelete(e.id)}
 					data-testid="{testid}-delete"><Icon name="trash" size={20} /></button

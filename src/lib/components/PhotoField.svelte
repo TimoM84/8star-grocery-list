@@ -3,6 +3,7 @@
 	import type { Product } from '$lib/shared/types';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
+	import { m } from '$lib/client/i18n';
 
 	let { product }: { product: Product } = $props();
 
@@ -26,9 +27,9 @@
 
 	async function remove() {
 		const ok = await ui.confirm({
-			title: 'Foto verwijderen?',
-			message: 'De foto verdwijnt bij dit product. Je kunt dit direct ongedaan maken.',
-			confirmLabel: 'Verwijderen',
+			title: m.photo.removeTitle,
+			message: m.photo.removeMessage,
+			confirmLabel: m.photo.remove,
 			danger: true
 		});
 		if (ok) app.removePhoto(product);
@@ -36,7 +37,7 @@
 </script>
 
 <fieldset data-testid="photo-field">
-	<legend class="mb-2 text-sm font-semibold text-muted">Foto (één per product)</legend>
+	<legend class="mb-2 text-sm font-semibold text-muted">{m.photo.field}</legend>
 	<input
 		bind:this={camera}
 		type="file"
@@ -62,7 +63,7 @@
 			<button
 				type="button"
 				class="shrink-0 overflow-hidden rounded-xl"
-				aria-label="Foto vergroten"
+				aria-label={m.photo.enlarge}
 				onclick={() => ui.openSheet('photo', { productId: product.id })}
 			>
 				<img src={url} alt="" class="h-16 w-16 object-cover" data-testid="photo-thumb" />
@@ -76,7 +77,7 @@
 				onclick={() => camera?.click()}
 			>
 				<Icon name="camera" size={20} class="text-accent" />
-				{url ? 'Nieuwe foto' : 'Foto maken'}
+				{url ? m.photo.retake : m.photo.take}
 			</button>
 			<button
 				type="button"
@@ -86,7 +87,7 @@
 				data-testid="photo-pick"
 			>
 				<Icon name="upload" size={20} class="text-accent" />
-				{url ? 'Vervangen' : 'Kies bestand'}
+				{url ? m.photo.replace : m.photo.pick}
 			</button>
 			{#if url}
 				<button
@@ -95,18 +96,19 @@
 					onclick={remove}
 					data-testid="photo-remove"
 				>
-					<Icon name="trash" size={20} /> Verwijderen
+					<Icon name="trash" size={20} />
+					{m.photo.remove}
 				</button>
 			{/if}
 		</div>
 	</div>
 	{#if busy}
-		<p class="mt-2 text-sm text-muted">Foto verkleinen…</p>
+		<p class="mt-2 text-sm text-muted">{m.photo.shrinking}</p>
 	{:else if pending === 'waiting'}
 		<p class="mt-2 text-sm text-muted" data-testid="photo-pending">
-			Nog niet gedeeld: wordt verstuurd zodra er verbinding is.
+			{m.photo.waiting}
 		</p>
 	{:else if pending === 'failed'}
-		<p class="mt-2 text-sm text-danger">Deze foto werd geweigerd. Kies een andere foto.</p>
+		<p class="mt-2 text-sm text-danger">{m.photo.rejected}</p>
 	{/if}
 </fieldset>

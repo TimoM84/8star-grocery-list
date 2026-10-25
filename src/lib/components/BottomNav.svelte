@@ -2,13 +2,15 @@
 	import { page } from '$app/state';
 	import Icon, { type IconName } from './Icon.svelte';
 	import { app } from '$lib/client/app.svelte';
+	import { m } from '$lib/client/i18n';
 
-	const tabs: { href: string; label: string; icon: IconName }[] = [
-		{ href: '/', label: 'Lijst', icon: 'list' },
-		{ href: '/suggesties', label: 'Suggesties', icon: 'sparkles' },
-		{ href: '/historie', label: 'Historie', icon: 'history' },
-		{ href: '/beheer', label: 'Beheer', icon: 'settings' }
-	];
+	// Test ids stay Dutch (the route names) whatever the UI language.
+	const tabs = $derived<{ href: string; id: string; label: string; icon: IconName }[]>([
+		{ href: '/', id: 'lijst', label: m.nav.list, icon: 'list' },
+		{ href: '/suggesties', id: 'suggesties', label: m.nav.suggestions, icon: 'sparkles' },
+		{ href: '/historie', id: 'historie', label: m.nav.history, icon: 'history' },
+		{ href: '/beheer', id: 'beheer', label: m.nav.settings, icon: 'settings' }
+	]);
 
 	const suggestionCount = $derived(
 		app.suggestions.length + (app.aiEnabled ? app.aiRecommendations.length : 0)
@@ -17,7 +19,7 @@
 
 <nav
 	class="hide-on-kb pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur"
-	aria-label="Hoofdnavigatie"
+	aria-label={m.nav.label}
 >
 	<ul
 		class="mx-auto grid h-[var(--nav-h)] max-w-2xl grid-cols-4 px-[env(safe-area-inset-left,0px)]"
@@ -32,7 +34,7 @@
 						? 'text-accent'
 						: 'text-muted'}"
 					aria-current={active ? 'page' : undefined}
-					data-testid="nav-{tab.label.toLowerCase()}"
+					data-testid="nav-{tab.id}"
 				>
 					<span
 						class="grid h-8 w-full max-w-14 place-items-center rounded-full transition-colors {active
@@ -44,7 +46,7 @@
 							{#if tab.href === '/suggesties' && suggestionCount > 0}
 								<span
 									class="absolute -top-[6px] left-[14px] h-[20px] min-w-[20px] rounded-full bg-accent px-[4px] text-center text-[11px] leading-[20px] font-bold text-on-accent"
-									aria-label="{suggestionCount} suggesties">{suggestionCount}</span
+									aria-label={m.nav.suggestionCount(suggestionCount)}>{suggestionCount}</span
 								>
 							{/if}
 						</span>

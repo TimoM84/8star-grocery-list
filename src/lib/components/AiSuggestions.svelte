@@ -5,7 +5,7 @@
 	import ImportPanel from './ImportPanel.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { ms } from '$lib/client/motion';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 	import { formatDate, relativeDay } from '$lib/client/format';
 
 	let importing = $state(false);
@@ -18,31 +18,27 @@
 	}
 
 	function confidenceLabel(c: number): string {
-		return c >= 0.75
-			? 'inschatting: waarschijnlijk'
-			: c >= 0.45
-				? 'inschatting: mogelijk'
-				: 'inschatting: onzeker';
+		return c >= 0.75 ? m.ai.likely : c >= 0.45 ? m.ai.possible : m.ai.uncertain;
 	}
 	const recs = $derived(app.aiRecommendations);
 
-	const kinds = [
+	const kinds = $derived([
 		{
 			id: 'ai' as const,
-			label: 'AI-suggesties (JSON)',
+			label: m.ai.importLabel,
 			accept: '.json,application/json',
-			hint: 'Een bestand in het formaat "8star-ai-recommendations" (zie Beheer → Gegevens → AI-opdracht).'
+			hint: m.ai.importHint
 		}
-	];
+	]);
 </script>
 
 <section id="ai" aria-labelledby="ai-title" class="scroll-mt-28" data-testid="ai-section">
 	<h2 id="ai-title" class="mb-1 flex items-center gap-2 text-lg font-bold">
-		<Icon name="brain" size={20} class="text-accent" /> AI-suggesties
+		<Icon name="brain" size={20} class="text-accent" />
+		{m.ai.title}
 	</h2>
 	<p class="mb-3 text-sm text-muted">
-		Uit een extern AI-bestand (bijv. ChatGPT of Claude). Los van de eigen voorspellingen; er wordt
-		nooit automatisch iets op de lijst gezet.
+		{m.ai.intro}
 	</p>
 
 	{#if recs.length}
@@ -60,22 +56,21 @@
 				>
 					<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
 						<h3 class="text-[1.0625rem] font-semibold [overflow-wrap:anywhere]">
-							{product?.name ?? 'Onbekend product'}
+							{product?.name ?? m.common.unknownProduct}
 						</h3>
 						{#if rec.suggestedQuantity !== null}
 							<span
 								class="rounded-full bg-accent-soft px-2.5 py-0.5 text-sm font-semibold text-accent"
-								data-testid="ai-qty"
-								>{formatQuantity(rec.suggestedQuantity, rec.suggestedUnit)}</span
+								data-testid="ai-qty">{qty(rec.suggestedQuantity, rec.suggestedUnit)}</span
 							>
 						{/if}
-						{#if onList}<span class="text-sm font-medium text-accent">staat op de lijst</span>{/if}
+						{#if onList}<span class="text-sm font-medium text-accent">{m.ai.onList}</span>{/if}
 					</div>
 					<p class="mt-1 text-base [overflow-wrap:anywhere] text-muted" data-testid="ai-reasoning">
 						{short}
 					</p>
 					<p class="mt-1 text-sm text-faint" data-testid="ai-meta">
-						{rec.source ?? 'AI-bestand'} · {confidenceLabel(rec.confidence)}
+						{rec.source ?? m.ai.sourceFallback} · {confidenceLabel(rec.confidence)}
 					</p>
 					{#if expanded[rec.id]}
 						<div
@@ -86,13 +81,12 @@
 									{rec.reasoning}
 								</p>{/if}
 							{#if rec.nextPurchaseAt !== null}
-								<p>Verwacht nodig: {relativeDay(rec.nextPurchaseAt, app.now)}</p>
+								<p>{m.ai.expected(relativeDay(rec.nextPurchaseAt, app.now))}</p>
 							{/if}
 							<p>
-								Opgegeven zekerheid {Math.round(rec.confidence * 100)}% — een schatting van het
-								AI-hulpmiddel, geen zekerheid.
+								{m.ai.confidence(Math.round(rec.confidence * 100))}
 							</p>
-							<p class="text-faint">Geïmporteerd {formatDate(rec.importedAt, app.now)}</p>
+							<p class="text-faint">{m.ai.imported(formatDate(rec.importedAt, app.now))}</p>
 						</div>
 					{/if}
 					<button
@@ -102,7 +96,7 @@
 						onclick={() => (expanded = { ...expanded, [rec.id]: !expanded[rec.id] })}
 						data-testid="ai-more"
 					>
-						{expanded[rec.id] ? 'Minder' : 'Waarom?'}
+						{expanded[rec.id] ? m.common.less : m.ai.why}
 						<Icon name={expanded[rec.id] ? 'chevronUp' : 'chevronDown'} size={16} />
 					</button>
 					<div class="mt-1 grid grid-cols-2 gap-2">
@@ -113,7 +107,7 @@
 							data-testid="ai-accept"
 						>
 							<Icon name={onList ? 'check' : 'plus'} size={20} />
-							{onList ? 'Afronden' : 'Toevoegen'}
+							{onList ? m.ai.complete : m.common.add}
 						</button>
 						<button
 							type="button"
@@ -121,7 +115,8 @@
 							onclick={() => app.dismissRecommendation(rec)}
 							data-testid="ai-dismiss"
 						>
-							<Icon name="x" size={20} /> Negeren
+							<Icon name="x" size={20} />
+							{m.ai.dismiss}
 						</button>
 					</div>
 				</li>
@@ -129,7 +124,7 @@
 		</ul>
 	{:else}
 		<p class="mb-3 rounded-2xl bg-surface-2 px-4 py-4 text-muted" data-testid="ai-empty">
-			Geen openstaande AI-suggesties.
+			{m.ai.empty}
 		</p>
 	{/if}
 
@@ -139,7 +134,7 @@
 			<button
 				type="button"
 				class="mt-3 min-h-12 w-full rounded-2xl font-semibold text-muted active:bg-surface-2"
-				onclick={() => (importing = false)}>Sluiten</button
+				onclick={() => (importing = false)}>{m.common.close}</button
 			>
 		</div>
 	{:else}
@@ -149,12 +144,13 @@
 			onclick={() => (importing = true)}
 			data-testid="ai-import-open"
 		>
-			<Icon name="upload" size={20} class="text-accent" /> AI-bestand importeren
+			<Icon name="upload" size={20} class="text-accent" />
+			{m.ai.importOpen}
 		</button>
 		<a
 			href="/beheer/gegevens"
 			class="mt-1 flex min-h-12 items-center justify-center text-sm font-semibold text-accent"
-			>Hoe maak ik zo’n bestand?</a
+			>{m.ai.howTo}</a
 		>
 	{/if}
 </section>

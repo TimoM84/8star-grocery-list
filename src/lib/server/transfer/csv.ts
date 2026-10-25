@@ -25,7 +25,12 @@ export function detectSeparator(text: string): string {
 	return best;
 }
 
-export class CsvError extends Error {}
+/** A CSV problem; the importer words `code` in the household language. */
+export class CsvError extends Error {
+	constructor(readonly code: 'unclosed' | 'empty') {
+		super(code === 'unclosed' ? 'Unclosed quote in CSV file.' : 'The CSV file is empty.');
+	}
+}
 
 /** Parses CSV into rows of strings. Handles quotes, escaped quotes and newlines in quotes. */
 export function parseCsv(text: string, separator = detectSeparator(text)): string[][] {
@@ -70,7 +75,7 @@ export function parseCsv(text: string, separator = detectSeparator(text)): strin
 			i++;
 		}
 	}
-	if (inQuotes) throw new CsvError('Onafgesloten aanhalingsteken in CSV-bestand.');
+	if (inQuotes) throw new CsvError('unclosed');
 	if (field !== '' || row.length) {
 		row.push(field);
 		rows.push(row);
@@ -92,7 +97,7 @@ const normaliseHeader = (h: string) =>
 
 export function readCsvTable(text: string): CsvTable {
 	const rows = parseCsv(text);
-	if (!rows.length) throw new CsvError('Het CSV-bestand is leeg.');
+	if (!rows.length) throw new CsvError('empty');
 	const header = rows[0].map(normaliseHeader);
 	const records = rows.slice(1).map((r, idx) => {
 		const values: Record<string, string> = {};

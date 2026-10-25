@@ -10,6 +10,7 @@ import path from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
 import { openDatabase } from '$lib/server/db';
 import { GroceryStore } from '$lib/server/store';
+import { writeSettings } from '$lib/server/settings';
 import { MEDIA_GRACE_MS, MediaError, MediaStore, sanitizeImage } from '$lib/server/media';
 import { exportBackupZip } from '$lib/server/export';
 import { runImport } from '$lib/server/transfer/importer';
@@ -87,6 +88,8 @@ function png(width: number, height: number) {
 function setup() {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), '8star-media-'));
 	const db = openDatabase(path.join(dir, 'grocery.db'));
+	// These tests check the Dutch wording; the household language decides it.
+	writeSettings(db, { language: 'nl' });
 	const store = new GroceryStore(db);
 	const media = new MediaStore(db, path.join(dir, 'media'));
 	let k = 0;
@@ -120,9 +123,9 @@ describe('photo validation', () => {
 		);
 		expect(() => sanitizeImage(svg)).toThrow(/JPEG/);
 		expect(() => sanitizeImage(Buffer.from('MZ\x90\0' + 'x'.repeat(100), 'binary'))).toThrow();
-		expect(() => sanitizeImage(jpeg(5000, 100))).toThrow(/te groot/);
-		expect(() => sanitizeImage(jpeg(8, 8))).toThrow(/te klein/);
-		expect(() => sanitizeImage(Buffer.alloc(4 * 1024 * 1024, 0xff))).toThrow(/groter/);
+		expect(() => sanitizeImage(jpeg(5000, 100))).toThrow(/too large/);
+		expect(() => sanitizeImage(jpeg(8, 8))).toThrow(/too small/);
+		expect(() => sanitizeImage(Buffer.alloc(4 * 1024 * 1024, 0xff))).toThrow(/larger than/);
 	});
 });
 

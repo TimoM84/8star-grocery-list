@@ -2,7 +2,7 @@
 	import Icon from './Icon.svelte';
 	import type { ItemView } from '$lib/shared/selectors';
 	import type { Claim } from '$lib/shared/types';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { m, qty as formatQty } from '$lib/client/i18n';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 
@@ -32,16 +32,16 @@
 	const product = $derived(view.product);
 	const done = $derived(item.status === 'completed');
 	const unavailable = $derived(!done && item.unavailableAt !== null);
-	const qty = $derived(formatQuantity(item.quantity, item.unit));
+	const qty = $derived(formatQty(item.quantity, item.unit));
 	const bought = $derived(
-		!done && item.purchasedQuantity ? formatQuantity(item.purchasedQuantity, item.unit) : ''
+		!done && item.purchasedQuantity ? formatQty(item.purchasedQuantity, item.unit) : ''
 	);
 	const claimLabel = $derived(
 		!claim || done
 			? ''
 			: claim.deviceId === app.deviceId
-				? 'Jij pakt dit'
-				: `${claim.deviceName ?? 'Iemand anders'} pakt dit`
+				? m.itemRow.you
+				: m.itemRow.claimedBy(claim.deviceName ?? m.common.someoneElse)
 	);
 	const photo = $derived(product.photoId ? app.photoUrl(product.photoId) : null);
 </script>
@@ -59,7 +59,7 @@
 	<button
 		type="button"
 		class="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2.5 pr-2 pl-3.5 text-left active:bg-surface-2"
-		aria-label={done ? `${product.name} terugzetten op de lijst` : `${product.name} afvinken`}
+		aria-label={done ? m.itemRow.putBack(product.name) : m.itemRow.tick(product.name)}
 		aria-pressed={done}
 		onclick={ontoggle}
 		data-testid="item-toggle"
@@ -80,15 +80,15 @@
 			>
 				{product.name}
 				{#if product.favorite && !done}
-					<span class="ml-0.5 inline-block align-[-2px] text-star" title="Favoriet">
+					<span class="ml-0.5 inline-block align-[-2px] text-star" title={m.common.favorite}>
 						<Icon name="star" size={15} filled stroke={1.5} />
-						<span class="sr-only">favoriet</span>
+						<span class="sr-only">{m.common.favoriteSr}</span>
 					</span>
 				{/if}
 				{#if isNew && !done}
 					<span
 						class="ml-1 inline-block rounded-full bg-accent px-2 py-px align-[2px] text-xs font-bold text-on-accent"
-						data-testid="item-new">Nieuw</span
+						data-testid="item-new">{m.itemRow.isNew}</span
 					>
 				{/if}
 			</span>
@@ -104,16 +104,16 @@
 				{#if item.substituteOk || bought || claimLabel || unavailable}
 					<span class="mt-0.5 flex flex-wrap gap-1 text-sm leading-tight">
 						{#if unavailable}
-							<span class="font-semibold text-warn">Niet verkrijgbaar</span>
+							<span class="font-semibold text-warn">{m.itemRow.unavailable}</span>
 						{/if}
 						{#if bought}
 							<span class="font-semibold text-accent" data-testid="item-bought"
-								>{bought} gehaald</span
+								>{m.itemRow.bought(bought)}</span
 							>
 						{/if}
 						{#if item.substituteOk}
 							<span class="text-muted" data-testid="item-substitute"
-								>Ander merk mag{item.substituteNote ? `: ${item.substituteNote}` : ''}</span
+								>{m.itemRow.substitute}{item.substituteNote ? `: ${item.substituteNote}` : ''}</span
 							>
 						{/if}
 						{#if claimLabel}
@@ -141,7 +141,7 @@
 		<button
 			type="button"
 			class="grid w-12 shrink-0 place-items-center active:bg-surface-2"
-			aria-label="Foto van {product.name} bekijken"
+			aria-label={m.itemRow.viewPhoto(product.name)}
 			onclick={() => ui.openSheet('photo', { productId: product.id })}
 			data-testid="item-photo"
 		>
@@ -151,7 +151,7 @@
 	<button
 		type="button"
 		class="grid w-12 shrink-0 place-items-center text-faint active:bg-surface-2"
-		aria-label={shopping ? `Meer acties voor ${product.name}` : `${product.name} bewerken`}
+		aria-label={shopping ? m.itemRow.moreActions(product.name) : m.itemRow.edit(product.name)}
 		onclick={onedit}
 		data-testid="item-edit"
 	>

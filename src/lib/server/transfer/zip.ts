@@ -71,7 +71,26 @@ export function createZip(entries: ZipEntry[], modified = new Date()): Buffer {
 
 // ------------------------------------------------------------------ reading
 
-export class ZipError extends Error {}
+export type ZipErrorCode =
+	| 'invalid'
+	| 'too_many'
+	| 'corrupt_directory'
+	| 'too_large'
+	| 'corrupt_entry'
+	| 'truncated'
+	| 'extract'
+	| 'compression'
+	| 'checksum';
+
+/** A ZIP problem; `code` and `entry` let the importer word it in the household language. */
+export class ZipError extends Error {
+	constructor(
+		readonly code: ZipErrorCode,
+		readonly entry = ''
+	) {
+		super(entry ? `${code}: ${entry}` : code);
+	}
+}
 
 /** Limits against malformed or malicious archives (zip bombs). */
 export const MAX_ZIP_ENTRIES = 5000;
@@ -89,16 +108,16 @@ export function readZip(buf: Buffer): Map<string, Buffer> {
 			break;
 		}
 	}
-	if (eocd < 0) throw new ZipError('geen geldig ZIP-bestand');
+	if (eocd < 0) throw new ZipError('invalid');
 	const count = buf.readUInt16LE(eocd + 10);
 	const cdOffset = buf.readUInt32LE(eocd + 16);
-	if (count > MAX_ZIP_ENTRIES) throw new ZipError('te veel bestanden in het archief');
+	if (count > MAX_ZIP_ENTRIES) throw new ZipError('too_many');
 	const out = new Map<string, Buffer>();
 	let total = 0;
 	let p = cdOffset;
 	for (let n = 0; n < count; n++) {
 		if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50)
-			throw new ZipError('beschadigde inhoudsopgave');
+			throw new ZipError('corrupt_directory');
 		const method = buf.readUInt16LE(p + 10);
 		const crc = buf.readUInt32LE(p + 16);
 		const compressed = buf.readUInt32LE(p + 20);
@@ -111,23 +130,22 @@ export function readZip(buf: Buffer): Map<string, Buffer> {
 		p += 46 + nameLen + extraLen + commentLen;
 		if (name.endsWith('/')) continue;
 		total += size;
-		if (total > MAX_ZIP_UNCOMPRESSED) throw new ZipError('archief is uitgepakt te groot');
+		if (total > MAX_ZIP_UNCOMPRESSED) throw new ZipError('too_large');
 		if (local + 30 > buf.length || buf.readUInt32LE(local) !== 0x04034b50)
-			throw new ZipError('beschadigd bestand in archief');
+			throw new ZipError('corrupt_entry');
 		const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
 		const raw = buf.subarray(start, start + compressed);
-		if (raw.length !== compressed) throw new ZipError('archief is afgekapt');
+		if (raw.length !== compressed) throw new ZipError('truncated');
 		let data: Buffer;
 		if (method === 0) data = Buffer.from(raw);
 		else if (method === 8) {
 			try {
 				data = inflateRawSync(raw, { maxOutputLength: size + 1 });
 			} catch {
-				throw new ZipError(`kan "${name}" niet uitpakken`);
+				throw new ZipError('extract', name);
 			}
-		} else throw new ZipError(`niet-ondersteunde compressie in "${name}"`);
-		if (data.length !== size || crc32(data) !== crc)
-			throw new ZipError(`controlesom van "${name}" klopt niet`);
+		} else throw new ZipError('compression', name);
+		if (data.length !== size || crc32(data) !== crc) throw new ZipError('checksum', name);
 		out.set(name, data);
 	}
 	return out;

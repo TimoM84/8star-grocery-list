@@ -11,6 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { DB } from './db';
+import { householdMessages } from './i18n';
+import { DEFAULT_LANGUAGE, messagesFor, type Messages } from '$lib/shared/i18n';
 
 export const MAX_MEDIA_BYTES = 3 * 1024 * 1024;
 export const MAX_MEDIA_EDGE = 4096;
@@ -57,24 +59,27 @@ export interface MediaRow {
 // ------------------------------------------------------------------ sanitising
 
 /** Validates an image and returns a copy without metadata. Throws MediaError. */
-export function sanitizeImage(input: Buffer): SanitizedImage {
+export function sanitizeImage(
+	input: Buffer,
+	t: Messages = messagesFor(DEFAULT_LANGUAGE)
+): SanitizedImage {
 	if (input.length > MAX_MEDIA_BYTES)
-		throw new MediaError(413, `Foto is groter dan ${MAX_MEDIA_BYTES / 1024 / 1024} MB.`);
-	if (input.length < 24) throw new MediaError(415, 'Geen geldige foto.');
+		throw new MediaError(413, t.media.tooLarge(MAX_MEDIA_BYTES / 1024 / 1024));
+	if (input.length < 24) throw new MediaError(415, t.media.invalid);
 	let out: SanitizedImage;
-	if (input[0] === 0xff && input[1] === 0xd8 && input[2] === 0xff) out = sanitizeJpeg(input);
+	if (input[0] === 0xff && input[1] === 0xd8 && input[2] === 0xff) out = sanitizeJpeg(input, t);
 	else if (
 		input.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
 	)
-		out = sanitizePng(input);
+		out = sanitizePng(input, t);
 	else if (input.toString('ascii', 0, 4) === 'RIFF' && input.toString('ascii', 8, 12) === 'WEBP')
-		out = sanitizeWebp(input);
-	else throw new MediaError(415, 'Alleen JPEG-, PNG- of WebP-foto’s zijn toegestaan.');
+		out = sanitizeWebp(input, t);
+	else throw new MediaError(415, t.media.type);
 	const { width, height } = out;
 	if (width < MIN_MEDIA_EDGE || height < MIN_MEDIA_EDGE)
-		throw new MediaError(422, 'Foto is te klein.');
+		throw new MediaError(422, t.media.tooSmall);
 	if (width > MAX_MEDIA_EDGE || height > MAX_MEDIA_EDGE || width * height > MAX_MEDIA_PIXELS)
-		throw new MediaError(422, `Foto is te groot (max ${MAX_MEDIA_EDGE} px per zijde).`);
+		throw new MediaError(422, t.media.tooBig(MAX_MEDIA_EDGE));
 	return out;
 }
 
@@ -97,13 +102,13 @@ function exifOrientation(app1: Buffer): number | null {
 	return null;
 }
 
-function sanitizeJpeg(buf: Buffer): SanitizedImage {
+function sanitizeJpeg(buf: Buffer, t: Messages): SanitizedImage {
 	const parts: Buffer[] = [buf.subarray(0, 2)];
 	let width = 0;
 	let height = 0;
 	let i = 2;
 	while (i < buf.length) {
-		if (buf[i] !== 0xff) throw new MediaError(415, 'Beschadigde JPEG.');
+		if (buf[i] !== 0xff) throw new MediaError(415, t.media.corrupt('JPEG'));
 		const marker = buf[i + 1];
 		if (marker === 0xd9) {
 			parts.push(buf.subarray(i, i + 2));
@@ -113,10 +118,10 @@ function sanitizeJpeg(buf: Buffer): SanitizedImage {
 			i++;
 			continue;
 		}
-		if (i + 4 > buf.length) throw new MediaError(415, 'Beschadigde JPEG.');
+		if (i + 4 > buf.length) throw new MediaError(415, t.media.corrupt('JPEG'));
 		const len = buf.readUInt16BE(i + 2);
 		const end = i + 2 + len;
-		if (end > buf.length) throw new MediaError(415, 'Beschadigde JPEG.');
+		if (end > buf.length) throw new MediaError(415, t.media.corrupt('JPEG'));
 		const segment = buf.subarray(i, end);
 		const payload = buf.subarray(i + 4, end);
 		const isSof =
@@ -129,8 +134,7 @@ function sanitizeJpeg(buf: Buffer): SanitizedImage {
 			const o = exifOrientation(payload);
 			// The app bakes the orientation into the pixels; a rotated original would show sideways
 			// once its EXIF is stripped, so it is refused instead of stored wrongly.
-			if (o !== null && o !== 1)
-				throw new MediaError(422, 'Foto heeft een draaiing in de metadata; kies hem via de app.');
+			if (o !== null && o !== 1) throw new MediaError(422, t.media.rotated);
 		}
 		// Keep JFIF (APP0) and Adobe (APP14, colour transform); drop all other APPn and comments.
 		const isApp = marker >= 0xe0 && marker <= 0xef;
@@ -143,13 +147,13 @@ function sanitizeJpeg(buf: Buffer): SanitizedImage {
 		}
 		i = end;
 	}
-	if (!width || !height) throw new MediaError(415, 'Beschadigde JPEG.');
+	if (!width || !height) throw new MediaError(415, t.media.corrupt('JPEG'));
 	return { mime: 'image/jpeg', width, height, data: Buffer.concat(parts) };
 }
 
 const PNG_DROP = new Set(['tEXt', 'zTXt', 'iTXt', 'eXIf', 'tIME']);
 
-function sanitizePng(buf: Buffer): SanitizedImage {
+function sanitizePng(buf: Buffer, t: Messages): SanitizedImage {
 	const parts: Buffer[] = [buf.subarray(0, 8)];
 	let width = 0;
 	let height = 0;
@@ -159,7 +163,7 @@ function sanitizePng(buf: Buffer): SanitizedImage {
 		const len = buf.readUInt32BE(i);
 		const type = buf.toString('ascii', i + 4, i + 8);
 		const end = i + 12 + len;
-		if (end > buf.length) throw new MediaError(415, 'Beschadigde PNG.');
+		if (end > buf.length) throw new MediaError(415, t.media.corrupt('PNG'));
 		if (type === 'IHDR') {
 			width = buf.readUInt32BE(i + 8);
 			height = buf.readUInt32BE(i + 12);
@@ -171,11 +175,11 @@ function sanitizePng(buf: Buffer): SanitizedImage {
 			break;
 		}
 	}
-	if (!ended || !width || !height) throw new MediaError(415, 'Beschadigde PNG.');
+	if (!ended || !width || !height) throw new MediaError(415, t.media.corrupt('PNG'));
 	return { mime: 'image/png', width, height, data: Buffer.concat(parts) };
 }
 
-function sanitizeWebp(buf: Buffer): SanitizedImage {
+function sanitizeWebp(buf: Buffer, t: Messages): SanitizedImage {
 	const chunks: Buffer[] = [];
 	let width = 0;
 	let height = 0;
@@ -185,7 +189,7 @@ function sanitizeWebp(buf: Buffer): SanitizedImage {
 		const type = buf.toString('ascii', i, i + 4);
 		const len = buf.readUInt32LE(i + 4);
 		const end = i + 8 + len + (len % 2);
-		if (i + 8 + len > buf.length) throw new MediaError(415, 'Beschadigde WebP.');
+		if (i + 8 + len > buf.length) throw new MediaError(415, t.media.corrupt('WebP'));
 		const data = buf.subarray(i + 8, i + 8 + len);
 		if (type === 'VP8 ' && len >= 10) {
 			width = data.readUInt16LE(6) & 0x3fff;
@@ -207,7 +211,7 @@ function sanitizeWebp(buf: Buffer): SanitizedImage {
 		chunks.push(chunk);
 		i = end;
 	}
-	if (!width || !height) throw new MediaError(415, 'Beschadigde WebP.');
+	if (!width || !height) throw new MediaError(415, t.media.corrupt('WebP'));
 	// Clear the EXIF (0x08) and XMP (0x04) flags of the extended header.
 	if (vp8x) vp8x[8] &= ~0x0c;
 	const body = Buffer.concat(chunks);
@@ -240,14 +244,14 @@ export class MediaStore {
 	 * the same id (offline queue retries) succeeds; a different photo under an existing id fails.
 	 */
 	put(id: string, input: Buffer, now = Date.now()): MediaRow {
-		if (!ID_RE.test(id)) throw new MediaError(400, 'Ongeldige foto-id.');
-		const img = sanitizeImage(input);
+		const t = householdMessages(this.db);
+		if (!ID_RE.test(id)) throw new MediaError(400, t.media.badId);
+		const img = sanitizeImage(input, t);
 		const sha256 = createHash('sha256').update(img.data).digest('hex');
 		const existing = this.row(id);
 		if (existing) {
 			if (existing.sha256 === sha256 && fs.existsSync(this.file(existing))) return existing;
-			if (existing.sha256 !== sha256)
-				throw new MediaError(409, 'Er bestaat al een andere foto met deze id.');
+			if (existing.sha256 !== sha256) throw new MediaError(409, t.media.idTaken);
 		}
 		this.writeFile({ id, mime: img.mime }, img.data);
 		const row: MediaRow = {

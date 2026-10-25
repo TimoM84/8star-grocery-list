@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { app } from '$lib/client/app.svelte';
+	import { m } from '$lib/client/i18n';
 
 	const s = $derived(app.status);
 	const state = $derived(
@@ -14,20 +15,20 @@
 	const label = $derived(
 		state === 'offline'
 			? s.pending > 0
-				? `Offline · ${s.pending}`
-				: 'Offline'
+				? `${m.syncBadge.offline} · ${s.pending}`
+				: m.syncBadge.offline
 			: state === 'syncing'
-				? 'Sync…'
+				? m.syncBadge.syncing
 				: state === 'connecting'
-					? 'Verbinden'
-					: 'Live'
+					? m.syncBadge.connecting
+					: m.syncBadge.live
 	);
 	const title = $derived(
 		state === 'offline'
-			? `Geen verbinding met de server. ${s.pending} wijziging(en) wachten en worden automatisch verstuurd.`
+			? m.syncBadge.offlineTitle(s.pending)
 			: state === 'online'
-				? 'Verbonden: wijzigingen worden direct gedeeld.'
-				: 'Bezig met synchroniseren.'
+				? m.syncBadge.onlineTitle
+				: m.syncBadge.syncingTitle
 	);
 </script>
 

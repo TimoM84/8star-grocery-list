@@ -15,6 +15,7 @@ import { PROTOCOL_VERSION, UNDOABLE_TYPES } from '$lib/shared/ops';
 import { applyOps, restoreHintFor, type LocalOp, type RestoreHint } from '$lib/shared/reducer';
 import type { PendingMedia, PendingRecord } from './idb';
 import { uuid } from './id';
+import { m as msg } from './i18n';
 
 export type Connection = 'connecting' | 'online' | 'offline';
 
@@ -266,7 +267,7 @@ export class SyncEngine {
 				void this.deps.storage.mediaDelete?.(m.id);
 			} else {
 				const body = (await res.json().catch(() => ({}))) as { message?: string };
-				const message = body.message ?? `Foto geweigerd (HTTP ${res.status}).`;
+				const message = body.message ?? msg.photo.serverRejected(res.status);
 				m.error = message;
 				void this.deps.storage.mediaPut?.(m);
 				this.issues = [
@@ -444,7 +445,7 @@ export class SyncEngine {
 									opId: r.id,
 									status: 'rejected',
 									reason: 'bad_request',
-									message: 'Wijziging geweigerd door de server: ' + (text || res.status)
+									message: msg.sync.refused(String(text || res.status))
 								},
 								0
 							);
@@ -464,7 +465,7 @@ export class SyncEngine {
 						opId: r.id,
 						status: 'rejected' as const,
 						reason: 'missing',
-						message: 'Geen antwoord van de server voor deze wijziging.'
+						message: msg.sync.noAnswer
 					};
 					this.handleResult(r, result, response.seq);
 				}
@@ -498,7 +499,7 @@ export class SyncEngine {
 		if (result.status === 'rejected') {
 			this.queue = this.queue.filter((r) => r !== record);
 			void this.deps.storage.pendingDelete([record.id]);
-			this.addIssue(op, 'rejected', result.message ?? 'Wijziging kon niet worden verwerkt.');
+			this.addIssue(op, 'rejected', result.message ?? msg.toast.opFailed);
 		} else {
 			record.ackSeq = seq;
 			if (result.conflicts?.length && result.message) this.addIssue(op, 'conflict', result.message);

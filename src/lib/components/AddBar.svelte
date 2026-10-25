@@ -2,7 +2,8 @@
 	import Icon from './Icon.svelte';
 	import { app, type AddOutcome } from '$lib/client/app.svelte';
 	import { autocomplete, type ProductView } from '$lib/shared/selectors';
-	import { formatQuantity, parseEntry } from '$lib/shared/quantity';
+	import { parseEntry } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 
 	let {
 		onadded,
@@ -35,7 +36,7 @@
 			)
 			.map((i) => app.list(i.listId)?.name)
 			.filter(Boolean);
-		return names.length ? `op ${names.join(', ')}` : null;
+		return names.length ? m.addBar.on(names.join(', ')) : null;
 	}
 
 	$effect(() => {
@@ -87,18 +88,18 @@
 	}
 
 	function statusLabel(v: ProductView): string {
-		if (v.status === 'active') return 'op de lijst';
+		if (v.status === 'active') return m.addBar.onList;
 		const other = elsewhere(v);
-		if (v.status === 'completed') return other ? `afgevinkt · ${other}` : 'afgevinkt · terugzetten';
+		if (v.status === 'completed') return `${m.addBar.ticked} · ${other ?? m.addBar.putBack}`;
 		if (other) return other;
-		if (v.stats.purchaseCount > 0) return `${v.stats.purchaseCount}× gekocht`;
+		if (v.stats.purchaseCount > 0) return m.addBar.bought(v.stats.purchaseCount);
 		return '';
 	}
 </script>
 
 <form class="relative" onsubmit={submit} autocomplete="off" data-testid="add-form">
 	<div class="flex items-center gap-2">
-		<label class="sr-only" for="add-input">Wat hebben we nodig?</label>
+		<label class="sr-only" for="add-input">{m.addBar.placeholder}</label>
 		<input
 			bind:this={input}
 			bind:value={text}
@@ -111,7 +112,7 @@
 			autocorrect="on"
 			spellcheck="true"
 			maxlength="90"
-			placeholder="Wat hebben we nodig?"
+			placeholder={m.addBar.placeholder}
 			class="h-14 min-w-0 flex-1 rounded-2xl border border-line bg-surface px-4 text-[min(1.125rem,5.4vw)] text-ink shadow-card outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
 			role="combobox"
 			aria-expanded={matches.length > 0}
@@ -130,7 +131,7 @@
 		<button
 			type="submit"
 			class="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent shadow-card transition-transform active:scale-95 disabled:opacity-60"
-			aria-label="Toevoegen"
+			aria-label={m.addBar.add}
 			onpointerdown={(e) => e.preventDefault()}
 			data-testid="add-button"
 		>
@@ -142,7 +143,7 @@
 		<ul
 			id="add-suggestions"
 			role="listbox"
-			aria-label="Eerdere producten"
+			aria-label={m.addBar.earlier}
 			class="absolute inset-x-0 top-full z-30 mt-2 max-h-[min(22rem,calc(100dvh-12rem))] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface py-1 shadow-card"
 			data-testid="autocomplete"
 		>
@@ -179,7 +180,7 @@
 						{#if parsed.quantity !== null}
 							<span
 								class="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-sm font-semibold text-accent"
-								>{formatQuantity(parsed.quantity, parsed.unit)}</span
+								>{qty(parsed.quantity, parsed.unit)}</span
 							>
 						{/if}
 					</button>

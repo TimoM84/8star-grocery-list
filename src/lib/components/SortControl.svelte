@@ -1,18 +1,19 @@
 <script lang="ts">
 	import type { SortMode } from '$lib/shared/types';
+	import { m } from '$lib/client/i18n';
 
 	let { value, onchange }: { value: SortMode; onchange: (m: SortMode) => void } = $props();
 
-	const options: { mode: SortMode; label: string; hint: string }[] = [
-		{ mode: 'newest', label: 'Nieuwste ↓', hint: 'Laatst toegevoegd bovenaan' },
-		{ mode: 'oldest', label: 'Oudste ↑', hint: 'Eerst toegevoegd bovenaan' },
-		{ mode: 'az', label: 'A–Z', hint: 'Alfabetisch' }
-	];
+	const options = $derived<{ mode: SortMode; label: string; hint: string }[]>([
+		{ mode: 'newest', label: m.sort.newest, hint: m.sort.newestHint },
+		{ mode: 'oldest', label: m.sort.oldest, hint: m.sort.oldestHint },
+		{ mode: 'az', label: m.sort.az, hint: m.sort.azHint }
+	]);
 </script>
 
 <div
 	role="radiogroup"
-	aria-label="Sortering"
+	aria-label={m.sort.label}
 	class="grid grid-cols-3 gap-1 rounded-2xl bg-surface-2 p-1"
 	data-testid="sort-control"
 >

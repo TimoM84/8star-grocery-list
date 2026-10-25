@@ -4,6 +4,7 @@
 	import type { ProductView } from '$lib/shared/selectors';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
+	import { m } from '$lib/client/i18n';
 
 	let {
 		view,
@@ -35,7 +36,8 @@
 				{view.product.name}
 				{#if view.product.favorite}
 					<span class="ml-0.5 inline-block align-[-2px] text-star"
-						><Icon name="star" size={15} filled stroke={1.5} /><span class="sr-only">favoriet</span
+						><Icon name="star" size={15} filled stroke={1.5} /><span class="sr-only"
+							>{m.common.favoriteSr}</span
 						></span
 					>
 				{/if}
@@ -52,8 +54,8 @@
 			? 'text-accent'
 			: 'bg-accent-soft text-accent active:bg-accent/20'}"
 		aria-label={onList
-			? `${view.product.name} staat op ${targetName ?? 'de lijst'}`
-			: `${view.product.name} op ${targetName ?? 'de lijst'} zetten`}
+			? m.productRow.isOn(view.product.name, targetName ?? m.productRow.theList)
+			: m.productRow.putOn(view.product.name, targetName ?? m.productRow.theList)}
 		disabled={onList}
 		onclick={() => app.addProduct(view.product, target)}
 		data-testid="product-quick-add"

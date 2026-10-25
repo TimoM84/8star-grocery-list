@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { ui } from '$lib/client/ui.svelte';
+	import { m } from '$lib/client/i18n';
 
 	/**
 	 * Web Share Target (see manifest): text shared from another app opens the "Meerdere
@@ -25,6 +26,6 @@
 	});
 </script>
 
-<svelte:head><title>Delen · 8star</title></svelte:head>
+<svelte:head><title>{m.share.title} · 8star</title></svelte:head>
 
-<p class="px-safe pt-10 text-center text-muted">Gedeelde tekst openen…</p>
+<p class="px-safe pt-10 text-center text-muted">{m.share.opening}</p>

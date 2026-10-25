@@ -5,7 +5,7 @@
 	import StockControl from './StockControl.svelte';
 	import type { Product } from '$lib/shared/types';
 	import { app } from '$lib/client/app.svelte';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { m, qty as formatQty } from '$lib/client/i18n';
 	import { MAX_NOTE_LENGTH } from '$lib/shared/text';
 	import { formatDate } from '$lib/client/format';
 
@@ -45,9 +45,9 @@
 	const label = 'mb-2 block text-sm font-semibold text-muted';
 </script>
 
-<section class="space-y-6" aria-label="Productgeheugen" data-testid="product-memory">
+<section class="space-y-6" aria-label={m.memory.label} data-testid="product-memory">
 	<div>
-		<h3 class={label}>Voorraad</h3>
+		<h3 class={label}>{m.memory.stock}</h3>
 		<StockControl {product} />
 		{#if product.stockStatus === 'low' || product.stockStatus === 'out'}
 			<button
@@ -59,24 +59,24 @@
 			>
 				<Icon name={onTarget ? 'check' : 'plus'} size={20} class="text-accent" />
 				{onTarget
-					? `Staat op ${app.list(target)?.name}`
-					: `Op ${app.list(target)?.name ?? 'de lijst'}`}
+					? m.memory.isOn(app.list(target)?.name ?? m.productRow.theList)
+					: m.memory.putOn(app.list(target)?.name ?? m.productRow.theList)}
 			</button>
 		{/if}
 		<p class="mt-1 text-sm text-faint">
-			Alleen wat jullie zelf aangeven. Er wordt nooit iets automatisch op de lijst gezet.
+			{m.memory.stockHelp}
 		</p>
 	</div>
 
 	<div>
-		<h3 class={label}>Gebruikelijk aantal</h3>
+		<h3 class={label}>{m.memory.usual}</h3>
 		{#if editingQty}
 			<QuantityEditor bind:quantity={qty} bind:unit />
 			<button
 				type="button"
 				class="mt-3 min-h-12 w-full rounded-2xl bg-accent font-semibold text-on-accent"
 				onclick={saveQty}
-				data-testid="default-qty-save">Opslaan</button
+				data-testid="default-qty-save">{m.common.save}</button
 			>
 		{:else}
 			<button
@@ -91,22 +91,22 @@
 			>
 				<span class="flex-1 font-semibold"
 					>{product.defaultQuantity !== null
-						? formatQuantity(product.defaultQuantity, product.defaultUnit)
-						: 'Niet ingesteld'}</span
+						? formatQty(product.defaultQuantity, product.defaultUnit)
+						: m.memory.notSet}</span
 				>
 				<Icon name="pencil" size={18} class="text-faint" />
 			</button>
 			<p class="mt-1 text-sm text-faint">
-				Gebruikt als je het toevoegt zonder aantal. Een getypt aantal gaat altijd voor.
+				{m.memory.usualHelp}
 			</p>
 		{/if}
 	</div>
 
 	{#if app.groceryLists.length > 1}
 		<fieldset>
-			<legend class={label}>Hoort meestal op</legend>
+			<legend class={label}>{m.memory.preferred}</legend>
 			<div class="flex flex-wrap gap-2">
-				{#each [{ id: null, name: 'Geen vaste lijst' }, ...app.groceryLists] as l (l.id ?? 'none')}
+				{#each [{ id: null, name: m.memory.noPreferred }, ...app.groceryLists] as l (l.id ?? 'none')}
 					<button
 						type="button"
 						aria-pressed={product.preferredListId === l.id}
@@ -119,26 +119,26 @@
 					>
 				{/each}
 			</div>
-			<p class="mt-1 text-sm text-faint">Bepaalt op welke lijst het wordt voorgesteld.</p>
+			<p class="mt-1 text-sm text-faint">{m.memory.preferredHelp}</p>
 		</fieldset>
 	{/if}
 
 	<div>
-		<label for="product-note" class={label}>Vaste notitie</label>
+		<label for="product-note" class={label}>{m.memory.note}</label>
 		<input
 			id="product-note"
 			bind:value={note}
 			maxlength={MAX_NOTE_LENGTH}
-			placeholder="bijv. ongezouten"
+			placeholder={m.itemSheet.productNotePlaceholder}
 			onchange={() => app.updateProduct(product, { note })}
 			class="h-12 w-full rounded-2xl border border-line bg-bg px-4 text-base outline-none focus:border-accent"
 			data-testid="product-note"
 		/>
-		<p class="mt-1 text-sm text-faint">Blijft bij het product, ook bij volgende keren.</p>
+		<p class="mt-1 text-sm text-faint">{m.memory.noteHelp}</p>
 	</div>
 
 	<div>
-		<h3 class={label}>Andere namen</h3>
+		<h3 class={label}>{m.memory.aliases}</h3>
 		{#if aliases.length}
 			<ul class="mb-2 flex flex-wrap gap-2" data-testid="alias-list">
 				{#each aliases as a (a.id)}
@@ -147,7 +147,7 @@
 						<button
 							type="button"
 							class="grid h-12 w-11 place-items-center text-faint"
-							aria-label="Andere naam {a.alias} verwijderen"
+							aria-label={m.memory.removeAlias(a.alias)}
 							onclick={() => app.removeAlias(a.id)}><Icon name="x" size={18} /></button
 						>
 					</li>
@@ -158,20 +158,19 @@
 			<input
 				bind:value={alias}
 				maxlength="80"
-				placeholder="bijv. halfvolle melk"
-				aria-label="Andere naam toevoegen"
+				placeholder={m.memory.aliasPlaceholder}
+				aria-label={m.memory.addAlias}
 				class="h-12 min-w-0 flex-1 rounded-2xl border border-line bg-bg px-4 text-base outline-none focus:border-accent"
 				data-testid="alias-input"
 			/>
 			<button
 				type="submit"
 				class="min-h-12 rounded-2xl bg-surface-2 px-4 font-semibold active:bg-surface-3"
-				data-testid="alias-add">Toevoegen</button
+				data-testid="alias-add">{m.common.add}</button
 			>
 		</form>
 		<p class="mt-1 text-sm text-faint">
-			Typen of plakken van deze naam vindt dit product. Producten worden nooit automatisch
-			samengevoegd.
+			{m.memory.aliasHelp}
 		</p>
 	</div>
 
@@ -183,12 +182,12 @@
 			data-testid="snooze-info"
 		>
 			<span class="min-w-0 flex-1 py-2 text-sm"
-				>Niet voorstellen tot {formatDate(snoozedUntil, app.now)}</span
+				>{m.memory.snoozedUntil(formatDate(snoozedUntil, app.now))}</span
 			>
 			<button
 				type="button"
 				class="min-h-12 rounded-xl px-3 text-sm font-semibold text-accent"
-				onclick={() => app.unsnooze(product)}>Weer voorstellen</button
+				onclick={() => app.unsnooze(product)}>{m.memory.unsnooze}</button
 			>
 		</div>
 	{/if}

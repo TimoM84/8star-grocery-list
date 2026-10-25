@@ -75,7 +75,7 @@ function importFile(
 describe('settings.update op', () => {
 	it('defaults to AI on, so existing installations keep their behaviour', () => {
 		expect(DEFAULT_SETTINGS.aiEnabled).toBe(true);
-		expect(makeStore().snapshot().settings).toEqual({ aiEnabled: true });
+		expect(makeStore().snapshot().settings).toEqual({ aiEnabled: true, language: 'en' });
 	});
 
 	it('switches AI off and on, shared through the snapshot, and is a no-op when unchanged', () => {
@@ -134,7 +134,7 @@ describe('optimistic reducer', () => {
 		const old = { ...snap } as Partial<Snapshot>;
 		delete old.settings;
 		const cloned = cloneSnapshot(old as Snapshot);
-		expect(cloned.settings).toEqual({ aiEnabled: true });
+		expect(cloned.settings).toEqual({ aiEnabled: true, language: 'en' });
 		const op = { id: 'o', at: T0, type: 'settings.update', aiEnabled: false } as Op;
 		expect(applyOps(cloned, [op], new Map()).settings.aiEnabled).toBe(false);
 	});
@@ -144,7 +144,7 @@ describe('export and import', () => {
 	it('exports the settings', () => {
 		const s = makeStore();
 		setAi(s, false);
-		expect(buildExport(s.db, 'test').data.settings).toEqual({ aiEnabled: false });
+		expect(buildExport(s.db, 'test').data.settings).toEqual({ aiEnabled: false, language: 'en' });
 	});
 
 	it('a full replace restores the setting from the file and reports it', () => {
@@ -155,12 +155,12 @@ describe('export and import', () => {
 
 		const preview = importFile(target, 'json', file, 'replace', true);
 		expect(preview.ok, preview.errors.join('\n')).toBe(true);
-		expect(preview.summary).toContain('AI-functies worden uitgezet (instelling uit het bestand)');
+		expect(preview.summary).toContain('AI features will be turned off (setting from the file)');
 		expect(target.snapshot().settings.aiEnabled).toBe(true);
 
 		const report = importFile(target, 'json', file, 'replace');
 		expect(report.ok, report.errors.join('\n')).toBe(true);
-		expect(report.summary).toContain('AI-functies uitgezet (instelling uit het bestand)');
+		expect(report.summary).toContain('AI features turned off (setting from the file)');
 		const snap = target.snapshot();
 		expect(snap.settings.aiEnabled).toBe(false);
 		// The AI data in the file is restored as well, just hidden.
@@ -186,9 +186,7 @@ describe('export and import', () => {
 		const report = importFile(target, 'json', file, 'merge');
 		expect(report.ok, report.errors.join('\n')).toBe(true);
 		expect(target.snapshot().settings.aiEnabled).toBe(true);
-		expect(report.summary.join('\n')).toContain(
-			'AI-instelling uit het bestand is niet overgenomen'
-		);
+		expect(report.summary.join('\n')).toContain('The AI setting from the file was not applied');
 	});
 
 	it('rejects an invalid settings value without changing anything', () => {

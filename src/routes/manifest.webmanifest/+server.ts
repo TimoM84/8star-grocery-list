@@ -1,15 +1,23 @@
 import type { RequestHandler } from './$types';
 import { currentTheme } from '$lib/server/theme';
+import { getRuntime } from '$lib/server/runtime';
+import { householdMessages } from '$lib/server/i18n';
+import { readSettings } from '$lib/server/settings';
 
-/** PWA manifest, generated at runtime so `theme_color` follows APP_PRIMARY_COLOR. */
+/**
+ * PWA manifest, generated at runtime so `theme_color` follows APP_PRIMARY_COLOR and the
+ * names follow the household language.
+ */
 export const GET: RequestHandler = () => {
 	const { theme } = currentTheme();
+	const { db } = getRuntime();
+	const m = householdMessages(db);
 	const manifest = {
 		id: '/',
-		name: '8star Boodschappen',
-		short_name: 'Boodschappen',
-		description: 'Gedeelde boodschappenlijst voor het hele huishouden — ook offline.',
-		lang: 'nl',
+		name: m.manifest.name,
+		short_name: m.manifest.shortName,
+		description: m.manifest.description,
+		lang: readSettings(db).language,
 		dir: 'ltr',
 		start_url: '/',
 		scope: '/',
@@ -33,14 +41,14 @@ export const GET: RequestHandler = () => {
 		},
 		shortcuts: [
 			{
-				name: 'Suggesties',
-				short_name: 'Suggesties',
+				name: m.nav.suggestions,
+				short_name: m.nav.suggestions,
 				url: '/suggesties',
 				icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }]
 			},
 			{
-				name: 'Historie',
-				short_name: 'Historie',
+				name: m.nav.history,
+				short_name: m.nav.history,
 				url: '/historie',
 				icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }]
 			}

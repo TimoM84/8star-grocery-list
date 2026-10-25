@@ -4,7 +4,7 @@
 	import { app, type AddPromptData } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
 	import { planEntry } from '$lib/shared/planning';
-	import { formatQuantity } from '$lib/shared/quantity';
+	import { m, qty } from '$lib/client/i18n';
 
 	const open = $derived(ui.isOpen('add-prompt'));
 	const data = $derived(ui.data<AddPromptData>('add-prompt'));
@@ -12,7 +12,7 @@
 	const plan = $derived(
 		open && data && app.view ? planEntry(app.view, data.listId, data.entry) : null
 	);
-	const listName = $derived(data ? (app.list(data.listId)?.name ?? 'deze lijst') : '');
+	const listName = $derived(data ? (app.list(data.listId)?.name ?? m.common.thisList) : '');
 	const item = $derived(plan?.item);
 	const dup = $derived(plan?.duplicate ?? null);
 	const elsewhere = $derived(plan?.elsewhere ?? []);
@@ -21,8 +21,11 @@
 		!plan
 			? ''
 			: plan.state === 'active'
-				? `“${plan.name}” staat er al op`
-				: `“${plan.name}” staat op ${elsewhere.map((e) => e.list.name).join(' en ')}`
+				? m.addPrompt.titleExists(plan.name)
+				: m.addPrompt.titleElsewhere(
+						plan.name,
+						elsewhere.map((e) => e.list.name).join(m.common.and)
+					)
 	);
 
 	function done() {
@@ -81,22 +84,21 @@
 		{#if plan.state === 'active' && item}
 			<p class="text-lg" data-testid="add-prompt-existing">
 				{#if item.quantity !== null}
-					Staat er al op: <strong>{formatQuantity(item.quantity, item.unit)}</strong>
+					{m.addPrompt.existing} <strong>{qty(item.quantity, item.unit)}</strong>
 				{:else}
-					Staat er al op, zonder aantal.
+					{m.addPrompt.existingNoQty}
 				{/if}
 			</p>
 			{#if dup?.block === 'incompatible'}
 				<p class="mt-2 text-muted">
-					Je typte {formatQuantity(data.entry.quantity, data.entry.unit)}. Dat is een andere
-					eenheid, dus optellen kan niet.
+					{m.addPrompt.incompatible(qty(data.entry.quantity, data.entry.unit))}
 				</p>
 			{:else if dup?.block === 'unknown_existing' && data.entry.quantity === null}
 				<p class="mt-2 text-muted">
-					Het aantal op de lijst is onbekend, dus er wordt niets opgeteld.
+					{m.addPrompt.unknownExisting}
 				</p>
 			{:else if dup?.block === 'not_countable'}
-				<p class="mt-2 text-muted">Typ een hoeveelheid om iets bij te zetten (bijv. “500 g”).</p>
+				<p class="mt-2 text-muted">{m.addPrompt.notCountable}</p>
 			{/if}
 			<div class="mt-5 grid gap-2">
 				{#if dup?.extra}
@@ -108,8 +110,8 @@
 					>
 						<Icon name="plus" size={20} />
 						{data.entry.quantity === null
-							? 'Eén extra'
-							: `${formatQuantity(dup.extra.quantity, dup.extra.unit)} extra`}
+							? m.addPrompt.oneExtra
+							: m.addPrompt.extra(qty(dup.extra.quantity, dup.extra.unit))}
 					</button>
 				{/if}
 				{#if dup?.set}
@@ -119,10 +121,8 @@
 						onclick={setTo}
 						data-testid="add-prompt-set"
 					>
-						<Icon name="pencil" size={20} /> Wijzigen naar {formatQuantity(
-							dup.set.quantity,
-							dup.set.unit
-						)}
+						<Icon name="pencil" size={20} />
+						{m.addPrompt.setTo(qty(dup.set.quantity, dup.set.unit))}
 					</button>
 				{:else if dup?.block === 'unknown_existing'}
 					<button
@@ -131,22 +131,24 @@
 						onclick={chooseQuantity}
 						data-testid="add-prompt-choose"
 					>
-						<Icon name="pencil" size={20} /> Aantal kiezen
+						<Icon name="pencil" size={20} />
+						{m.addPrompt.choose}
 					</button>
 				{/if}
 				<button
 					type="button"
 					class="min-h-12 rounded-2xl bg-surface-2 px-4 text-base font-semibold active:bg-surface-3"
 					onclick={done}
-					data-testid="add-prompt-cancel">Laat zo</button
+					data-testid="add-prompt-cancel">{m.addPrompt.keep}</button
 				>
 			</div>
 		{:else}
 			<p class="text-lg" data-testid="add-prompt-elsewhere">
 				{#each elsewhere as e, i (e.item.id)}
-					{i ? ' en ' : ''}Op <strong>{e.list.name}</strong>{#if e.item.quantity !== null}
-						({formatQuantity(e.item.quantity, e.item.unit)}){/if}
-				{/each}. Wat wil je doen?
+					{i ? m.common.and : ''}{m.addPrompt.on}
+					<strong>{e.list.name}</strong>{#if e.item.quantity !== null}
+						({qty(e.item.quantity, e.item.unit)}){/if}
+				{/each}. {m.addPrompt.whatToDo}
 			</p>
 			<div class="mt-5 grid gap-2">
 				<button
@@ -155,7 +157,8 @@
 					onclick={alsoHere}
 					data-testid="add-prompt-also"
 				>
-					<Icon name="plus" size={20} /> Ook op {listName} zetten
+					<Icon name="plus" size={20} />
+					{m.addPrompt.alsoOn(listName)}
 				</button>
 				{#if plan.state === 'new' && elsewhere.length === 1}
 					<button
@@ -164,14 +167,15 @@
 						onclick={moveHere}
 						data-testid="add-prompt-move"
 					>
-						<Icon name="arrowRight" size={20} /> Verplaatsen naar {listName}
+						<Icon name="arrowRight" size={20} />
+						{m.addPrompt.moveTo(listName)}
 					</button>
 				{/if}
 				<button
 					type="button"
 					class="min-h-12 rounded-2xl bg-surface-2 px-4 text-base font-semibold active:bg-surface-3"
 					onclick={done}
-					data-testid="add-prompt-cancel">Annuleren</button
+					data-testid="add-prompt-cancel">{m.common.cancel}</button
 				>
 			</div>
 		{/if}

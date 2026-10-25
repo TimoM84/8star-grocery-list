@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import { fade, scale } from 'svelte/transition';
 	import { ui } from '$lib/client/ui.svelte';
+	import { m } from '$lib/client/i18n';
 
 	const req = $derived(ui.confirmRequest);
 	const open = $derived(req !== null && page.state.confirm === true);
@@ -21,7 +22,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 h-full w-full cursor-default bg-black/50"
-			aria-label="Annuleren"
+			aria-label={m.common.cancel}
 			tabindex="-1"
 			onclick={() => ui.answerConfirm(false)}
 			transition:fade={{ duration: ms(140) }}
@@ -41,7 +42,7 @@
 				<button
 					type="button"
 					class="min-h-12 rounded-2xl bg-surface-2 px-4 text-base font-semibold active:bg-surface-3"
-					onclick={() => ui.answerConfirm(false)}>Annuleren</button
+					onclick={() => ui.answerConfirm(false)}>{m.common.cancel}</button
 				>
 				<button
 					type="button"
