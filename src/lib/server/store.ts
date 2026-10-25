@@ -33,6 +33,7 @@ import {
 } from '$lib/shared/ops';
 import { capitaliseFirst, cleanName, compareNl, nameKey } from '$lib/shared/text';
 import { convertQuantity, formatQuantity, roundQuantity } from '$lib/shared/quantity';
+import { readSettings, writeSettings } from './settings';
 
 /** Max completion timestamps per product included in snapshots (enough for local stats). */
 export const SNAPSHOT_COMPLETIONS = 200;
@@ -357,7 +358,8 @@ export class GroceryStore {
 					}[]
 				).map((r) => ({ productId: r.product_id, until: r.until })),
 				rounds: this.activeRounds(),
-				claims: this.activeClaims(now)
+				claims: this.activeClaims(now),
+				settings: readSettings(this.db)
 			};
 		});
 		return read();
@@ -1295,6 +1297,11 @@ export class GroceryStore {
 					.run(now, rec.id);
 				return { status: 'applied', productId: rec.product_id };
 			}
+			case 'settings.update':
+				// Hiding features never deletes data: AI suggestions stay stored and come back as is.
+				return writeSettings(this.db, { aiEnabled: op.aiEnabled })
+					? { status: 'applied' }
+					: { status: 'noop', reason: 'unchanged' };
 			case 'undo':
 				return this.undo(op.targetOpId, now);
 		}

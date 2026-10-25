@@ -90,7 +90,9 @@
 		{/if}
 	</section>
 
-	<AiSuggestions />
+	{#if app.aiEnabled}
+		<AiSuggestions />
+	{/if}
 
 	<section aria-labelledby="bundles" data-testid="bundles-section">
 		<h2 id="bundles" class="mb-1 flex items-center gap-2 text-lg font-bold">

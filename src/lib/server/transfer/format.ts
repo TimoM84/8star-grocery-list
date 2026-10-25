@@ -6,7 +6,8 @@
  * memory, note, photo reference and stock status), aliases, list items (with notes and
  * statuses), purchase events, bundles, AI recommendations and photo metadata. Derived
  * statistics are included for analysis but ignored on import. Format 1 files (v1.1) and the
- * v1.0 export are still accepted; missing fields get safe defaults.
+ * v1.0 export are still accepted; missing fields get safe defaults. Since v1.3 format 2 also
+ * carries the household settings (`data.settings`, optional on import).
  *
  * Deliberately not exported (temporary): shopping rounds, participants, claims, device names
  * and "Niet nu" snoozes.
@@ -17,6 +18,8 @@ import { schemaVersion } from '../db';
 import { computeStats } from '$lib/shared/stats';
 import { UNITS } from '$lib/shared/quantity';
 import { cleanName, nameKey, MAX_NAME_LENGTH, MAX_NOTE_LENGTH } from '$lib/shared/text';
+import type { Settings } from '$lib/shared/settings';
+import { readSettings } from '../settings';
 
 export const EXPORT_FORMAT = '8star-grocery-export';
 export const EXPORT_FORMAT_VERSION = 2;
@@ -147,6 +150,8 @@ export interface ExportData {
 	productAliases: ExportAlias[];
 	bundles: ExportBundle[];
 	media: ExportMedia[];
+	/** Household settings (v1.3). Optional on import: absent keeps the current settings. */
+	settings?: Settings;
 }
 
 export interface ExportFile {
@@ -288,7 +293,8 @@ export function exportData(db: DB): ExportData {
 				sha256: m.sha256 as string,
 				createdAt: isoReq(m.created_at as number),
 				file: `media/${m.id as string}.${mediaExt(m.mime as string)}`
-			}))
+			})),
+			settings: readSettings(db)
 		};
 	});
 	return read();
@@ -450,6 +456,8 @@ export interface ImportDataset {
 	productAliases: ImportAlias[];
 	bundles: ImportBundle[];
 	media: ImportMedia[];
+	/** Only the settings present in the file; a replace applies them, a merge ignores them. */
+	settings?: Partial<Settings>;
 }
 
 export class Validator {
@@ -891,6 +899,17 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 			resolvedAt: v.nullableTime(o.resolvedAt, `${p}.resolvedAt`)
 		});
 	});
+
+	if (data.settings !== undefined && data.settings !== null) {
+		const o = v.obj(data.settings, 'data.settings');
+		if (o) {
+			out.settings = {};
+			if (o.aiEnabled !== undefined) {
+				if (typeof o.aiEnabled === 'boolean') out.settings.aiEnabled = o.aiEnabled;
+				else v.error('settings.aiEnabled', 'moet true of false zijn');
+			}
+		}
+	}
 
 	checkIntegrity(out, v);
 	return out;

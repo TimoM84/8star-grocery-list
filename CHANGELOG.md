@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **AI-functies tonen** in Beheer → Functies: one switch for the whole household that hides
+  every AI feature (the AI-suggesties section and its badge count, AI-bestand importeren, the
+  Analyseren met AI block with the AI-opdracht, and the explanations). On by default, so
+  upgrading changes nothing. Switching off only hides: imported suggestions stay stored and come
+  back unchanged. The setting is stored on the server (`meta`, no schema change), synced to
+  every device through the new `settings.update` op (sync protocol 3), works offline, and is
+  part of the JSON export (`data.settings`) and the backup. **Alles vervangen** restores it;
+  **Samenvoegen** and older files without settings leave it as it is.
+
 ## 1.2.0
 
 Shopping in the store, honest quantities and product memory. Built on v1.1.0; every existing

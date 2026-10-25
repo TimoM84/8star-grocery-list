@@ -176,6 +176,8 @@ class AppState {
 			this.now
 		)
 	);
+	/** Household-wide switch (Beheer → Functies): off hides every AI feature, data is kept. */
+	aiEnabled = $derived(this.view?.settings.aiEnabled ?? true);
 	/** Open recommendations imported from an external AI tool (separate from local predictions). */
 	aiRecommendations = $derived<AiRecommendation[]>(this.view?.aiRecommendations ?? []);
 	bundles = $derived<Bundle[]>(this.view?.bundles ?? []);
@@ -323,6 +325,17 @@ class AppState {
 	setShareRound(on: boolean) {
 		this.shareRound = on;
 		lsSet(LS.shareRound, on);
+	}
+
+	/** Shared with every device; synced like any other change. */
+	setAiEnabled(on: boolean) {
+		if (on === this.aiEnabled) return;
+		this.run({ type: 'settings.update', aiEnabled: on });
+		toasts.show(
+			on
+				? 'AI-functies staan aan op alle apparaten'
+				: 'AI-functies verborgen op alle apparaten. Er is niets verwijderd.'
+		);
 	}
 
 	// --------------------------------------------------------------- lookups

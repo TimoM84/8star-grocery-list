@@ -17,6 +17,7 @@ export const POST = () => {
 			DELETE FROM items; DELETE FROM cycles; DELETE FROM products; DELETE FROM id_aliases;
 			DELETE FROM media;
 			DELETE FROM ops; DELETE FROM lists; DELETE FROM categories;
+			DELETE FROM meta WHERE key LIKE 'setting.%';
 		`);
 		db.exec(migrations.find((m) => m.version === 2)!.sql);
 	})();

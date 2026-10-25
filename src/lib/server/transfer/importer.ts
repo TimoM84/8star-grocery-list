@@ -7,6 +7,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { GroceryStore } from '../store';
 import { createBackupSync } from '../backup';
+import { readSettings, writeSettings } from '../settings';
 import {
 	parseExportFile,
 	parseTimestamp,
@@ -141,6 +142,7 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 		errors: []
 	};
 	const count = (key: string) => (report.counts[key] ??= counter());
+	const settingNotes: string[] = [];
 
 	try {
 		// Parse and validate everything before touching the database.
@@ -169,8 +171,17 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 				const photos = preparePhotos(store, data, backup, options, report, count);
 				apply = () => {
 					photos();
-					if (mode === 'replace') replaceAll(store, data, count, now);
-					else mergeDataset(store, data, count, report, now);
+					if (mode === 'replace') {
+						replaceAll(store, data, count, now);
+						settingNotes.push(...applySettings(store, data, preview));
+					} else {
+						mergeDataset(store, data, count, report, now);
+						const ai = data.settings?.aiEnabled;
+						if (ai !== undefined && ai !== readSettings(store.db).aiEnabled)
+							settingNotes.push(
+								'De AI-instelling uit het bestand is niet overgenomen (alleen bij alles vervangen).'
+							);
+					}
 				};
 			} else {
 				apply = prepareAiImport(store, parsed, count, report, now);
@@ -212,8 +223,10 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 		}
 		report.ok = false;
 	}
-	if (report.ok) summarise(report);
-	else report.summary = ['Er is niets gewijzigd.'];
+	if (report.ok) {
+		summarise(report);
+		report.summary.push(...settingNotes);
+	} else report.summary = ['Er is niets gewijzigd.'];
 	return report;
 }
 
@@ -286,6 +299,23 @@ function replaceAll(
 	count('aiRecommendations').added = d.aiRecommendations.length;
 
 	store.markDatasetReplaced(now);
+}
+
+/**
+ * A full replace restores the settings stored in the file. Files without settings (older
+ * exports) keep the current ones. Returns summary lines for changed settings.
+ */
+function applySettings(store: GroceryStore, d: ImportDataset, preview: boolean): string[] {
+	const ai = d.settings?.aiEnabled;
+	if (ai === undefined || !writeSettings(store.db, { aiEnabled: ai })) return [];
+	const verb = preview
+		? ai
+			? 'worden aangezet'
+			: 'worden uitgezet'
+		: ai
+			? 'aangezet'
+			: 'uitgezet';
+	return [`AI-functies ${verb} (instelling uit het bestand)`];
 }
 
 function productInserter(store: GroceryStore) {

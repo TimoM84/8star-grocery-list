@@ -53,8 +53,8 @@ contains changes nothing.
 
 ## Protocol versions
 
-Every request carries `protocol` (1 = v1.0/v1.1, 2 = v1.2) and every snapshot reports the
-server's version. The server keeps accepting **every op type of older protocols**, so a phone
+Every request carries `protocol` (1 = v1.0/v1.1, 2 = v1.2, 3 = v1.3) and every snapshot
+reports the server's version. The server keeps accepting **every op type of older protocols**, so a phone
 that still runs v1.1 after the server was upgraded can send its offline queue without losing
 anything. A v1.2 phone that talks to an older server gets op types it doesn't know rejected
 individually (shown and logged, never dropped silently); when the server reports a newer
@@ -143,6 +143,21 @@ The replace also marks all recorded ops as no longer undoable, because their bef
 describe the replaced data. Before importing, the importing device sends its own queued ops
 first. A restore of a SQLite backup lowers the sequence number instead, and devices handle that
 the same way (see the conflict table).
+
+## Household settings (v1.3)
+
+Settings that apply to every device (currently only `aiEnabled`, "AI-functies tonen") are stored
+as `setting.*` rows in the `meta` table and sent with every snapshot as `settings`. They change
+through one op:
+
+| Op                | Meaning                                                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `settings.update` | `{ aiEnabled: boolean }`. Applied when the value changes, otherwise a no-op (`unchanged`) |
+
+The op is idempotent, applied optimistically and queued offline like every other op, and it is
+not undoable (switching back is the undo). The last device to send it wins. Snapshots from an
+older server have no `settings`; the app then uses the defaults (`aiEnabled: true`), so nothing
+is hidden. An older server rejects the op as unknown, which is shown and logged as usual.
 
 ## AI suggestions
 

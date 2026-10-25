@@ -112,7 +112,8 @@ describe('selectors', () => {
 		bundles: [],
 		snoozes: [],
 		rounds: [],
-		claims: []
+		claims: [],
+		settings: { aiEnabled: true }
 	};
 
 	it('autocompletes prefix matches first and skips exact active duplicates', () => {

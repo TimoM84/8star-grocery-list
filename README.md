@@ -104,6 +104,9 @@ Screenshots are produced by the Playwright suite (`npm run test:e2e` writes them
   Suggestions are shown separately from the local predictions, accepted or dismissed with one
   tap, and never touch the list or history by themselves. See
   [docs/AI-RECOMMENDATIONS.md](docs/AI-RECOMMENDATIONS.md).
+- **AI-functies tonen** (Beheer → Functies): one switch for the whole household. Off hides
+  every AI feature (AI-suggesties, AI import, AI-opdracht and their explanations) on all
+  devices; nothing is deleted, and switching it on brings everything back. On by default.
 
 **One accent color for the whole app**
 
@@ -184,7 +187,7 @@ e2e/              Playwright: CRUD, lists, history, sync, offline, imports, AI, 
 | `rounds`             | Shopping rounds per list (one open round per list)                                |
 | `round_participants` | Devices in a round, with heartbeat                                                |
 | `claims`             | “Ik pak dit” claims with expiry                                                   |
-| `meta`               | Global change sequence and data epoch                                             |
+| `meta`               | Global change sequence, data epoch and household settings (`setting.*`)           |
 
 Schema 4 (1.2) also adds list kind and walking route, product defaults/stock/photo, item notes,
 substitutes, position and `quantity_rev`, and requested/purchased quantities per cycle.

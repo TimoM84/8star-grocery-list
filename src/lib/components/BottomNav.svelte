@@ -10,7 +10,9 @@
 		{ href: '/beheer', label: 'Beheer', icon: 'settings' }
 	];
 
-	const suggestionCount = $derived(app.suggestions.length + app.aiRecommendations.length);
+	const suggestionCount = $derived(
+		app.suggestions.length + (app.aiEnabled ? app.aiRecommendations.length : 0)
+	);
 </script>
 
 <nav
