@@ -15,6 +15,8 @@ copy so it can be used offline.
 | Optimistic reducer  | `src/lib/shared/reducer.ts` | Applies queued ops on top of the last snapshot for instant UI           |
 | IndexedDB           | `src/lib/client/idb.ts`     | Persists the snapshot, the pending queue, aliases and sync issues       |
 | SSE (`/api/events`) | `src/lib/server/events.ts`  | Pushes `{ seq }` to every device after each change                      |
+| Photo queue         | IndexedDB `media` store     | Photos waiting for upload (`PUT /api/media/:id`), sent before the ops   |
+| Presence            | `POST /api/presence`        | Winkelstand heartbeat; not an op (nothing to replay or undo)            |
 
 ## Life of a change
 
@@ -49,6 +51,42 @@ contains changes nothing.
 - When the page is hidden or closed, pending ops are also sent with a `keepalive` request.
   Sending them twice is harmless.
 
+## Protocol versions
+
+Every request carries `protocol` (1 = v1.0/v1.1, 2 = v1.2) and every snapshot reports the
+server's version. The server keeps accepting **every op type of older protocols**, so a phone
+that still runs v1.1 after the server was upgraded can send its offline queue without losing
+anything. A v1.2 phone that talks to an older server gets op types it doesn't know rejected
+individually (shown and logged, never dropped silently); when the server reports a newer
+protocol, Beheer shows “De server draait een nieuwere versie”. Snapshots cached by an older app
+version are normalised with safe defaults when read.
+
+## Intent ops (v1.2)
+
+Quantity changes are explicit intents, never “set the row to what I saw”:
+
+| Op                         | Meaning                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `item.add`                 | Puts a product on a list. If it is already active it is a no-op (`duplicate`): the quantity is **never** changed by an add                                          |
+| `item.increment`           | Adds `delta` (in `unit`) atomically on the server. Rejected for an unknown existing amount or incompatible units; only g↔kg and ml↔l are converted                  |
+| `item.update` (`quantity`) | Explicit “Wijzigen naar”. Bumps the item's `quantity_rev`                                                                                                           |
+| `item.purchasePartial`     | Records a partial purchase on the open cycle (`purchased_quantity`) and lowers the remaining quantity. The cycle completes once, so frequency is not inflated       |
+| `items.addMany`            | Bulk paste, bundles, shared text: one transaction (savepoint), all or nothing. Each line says `add`, `extra` or `set`                                               |
+| `item.setUnavailable`      | Parks an item as “Niet verkrijgbaar”; `list.retryUnavailable` and joining a new round reset it                                                                      |
+| `round.join/leave/end`     | One active round per list (partial unique index), concurrent starts merge into the same round (`roundId` in the result). Ending or leaving never completes anything |
+| `item.claim` / `release`   | “Ik pak dit”, expires after 20 min, removed on completion. A claim by someone else is a no-op with a message; it never blocks completing                            |
+| `product.snooze`           | Shared “Niet nu” until a timestamp (`until: 0` clears)                                                                                                              |
+| `product.setStock`         | Stock status with timestamp; never changed by predictions or checklists                                                                                             |
+| `product.setPhoto`         | Points a product at an uploaded photo (or `null`)                                                                                                                   |
+| `alias.add/remove`         | Manual alternative names; a name that already belongs to another product is rejected                                                                                |
+| `bundle.save/delete`       | Upsert of a bundle with all its lines; deleting never touches products or history                                                                                   |
+| `list.setKind`             | Grocery ↔ checklist. Open cycles are cancelled/created so checklist ticks never count as purchases; history is kept                                                 |
+| `list.setCategoryOrder`    | Per-list walking route (`null` = global order)                                                                                                                      |
+| `list.resetChecklist`      | Puts the given completed checklist items back to “Nog te doen”                                                                                                      |
+
+Two devices that each add one extra to an item with 2 end at 4; a resent `item.increment` (same
+op id) counts once.
+
 ## Conflict rules
 
 The server applies ops in the order it receives them. Ops express _intent_ ("complete item X"),
@@ -70,6 +108,9 @@ not "set the whole row to Y", which avoids most conflicts by design.
 | Server restored from a backup (seq goes down)                 | Devices accept the restored data, drop overlays of already-acknowledged ops, and re-send ops that never reached the server                                      |
 | Full import/restore done on another device (new data epoch)   | Devices are told (toast), drop cached state and overlays, reload the server data and then send their unsent ops; ops that no longer fit are rejected and logged |
 | Accepting or dismissing the same AI suggestion on two devices | First one wins, the second is a no-op; the product is put on the list only once                                                                                 |
+| Two devices start a round on the same list                    | One round; the second join merges into it                                                                                                                       |
+| Undo of “1 extra” after someone else added extra              | Only your own amount is removed; the other device's increment stays                                                                                             |
+| Undo of “1 extra” after someone set the amount explicitly     | Rejected (`conflict`) with “het aantal is intussen op een andere manier gewijzigd”; nothing is reverted                                                         |
 
 ### No silent data loss
 
@@ -109,6 +150,16 @@ the same way (see the conflict table).
 on the chosen list exactly like an `item.add` (or reactivates it) and marks the suggestion as
 accepted, in one transaction. It never writes purchase history.
 
+## Photos
+
+Photos never travel through ops, snapshots or SSE. The phone scales and re-encodes a photo,
+stores it in the IndexedDB `media` store and queues the `product.setPhoto` op. Every flush first
+uploads waiting photos (`PUT /api/media/:id`, idempotent: the same bytes under the same id are
+accepted again, different bytes are refused), then sends the ops, so the server never sees a
+reference to a missing photo. A photo the server refuses is shown as an issue and can be
+discarded. Images are immutable per id and served with long cache headers; the service worker
+keeps up to 200 of them for offline viewing.
+
 ## Undo
 
 - If the op has not left the device yet, undo removes it from the queue.
@@ -116,6 +167,10 @@ accepted, in one transaction. It never writes purchase history.
   before-images of every row it touched plus the resulting versions. Undo restores those rows
   if the versions still match. Undoing a completion therefore re-opens the same purchase cycle
   and keeps the original activation time: **no purchase is counted**.
+- Intent ops (`item.increment`, `item.purchasePartial`) use a _semantic_ inverse instead of row
+  images: undo subtracts exactly the amount that op added (or gives back the partial amount), so
+  later increments by other devices survive. It refuses when the amount was changed explicitly
+  in between (`quantity_rev`), the unit changed or the cycle ended.
 
 ## History model
 
@@ -132,7 +187,12 @@ accepted, in one transaction. It never writes purchase history.
     **3 trips** (`MIN_HISTORY`).
   - "Misschien nodig" lists products not on the current list whose elapsed time is 80–400 % of
     their usual interval. Suggestions are never added automatically. "Niet nu" hides a
-    suggestion on that device for half an interval.
+    suggestion on every device for half an interval (1–14 days), until a visible end date.
+  - Suggestions are list-aware: a product with a preferred list is only suggested there;
+    otherwise on every grocery list where it has an item row; a product without any row on a
+    grocery list is suggested on all grocery lists. Checklists get no suggestions.
+- Partial purchases count as one purchase with the total bought quantity. Checklist ticks never
+  create purchase cycles.
 
 ## Clocks
 

@@ -14,7 +14,7 @@ import {
 	waitForSync
 } from './helpers';
 
-/** End-to-end scenarios for the v1.2 features (see docs/TESTING.md, scenarios 1–8). */
+/** End-to-end scenarios for the v1.2 features (scenarios 1–8 of the v1.2 brief; listed in CHANGELOG.md). */
 
 const SHOT_DIR = 'screenshots';
 fs.mkdirSync(SHOT_DIR, { recursive: true });

@@ -6,9 +6,18 @@
 	const exports: { href: string; label: string; detail: string; icon: IconName; testid: string }[] =
 		[
 			{
+				href: '/api/export?format=backup',
+				label: 'Volledige back-up met foto’s (ZIP)',
+				detail:
+					'Alle gegevens plus productfoto’s. Het beste bestand om alles terug te zetten via Importeren.',
+				icon: 'database',
+				testid: 'export-backup'
+			},
+			{
 				href: '/api/export?format=json',
 				label: 'Volledige export (JSON)',
-				detail: 'Alles met geschiedenis, id’s en tijden. Terug te zetten via Importeren.',
+				detail:
+					'Alle gegevens met geschiedenis, id’s en tijden, maar zonder de foto’s zelf. Terug te zetten via Importeren.',
 				icon: 'database',
 				testid: 'export-json'
 			},
@@ -46,9 +55,9 @@
 	const kinds = [
 		{
 			id: 'json' as const,
-			label: 'Volledige export (JSON)',
-			accept: '.json,application/json',
-			hint: 'Een JSON-export van 8star (ook van v1.0.0). Samenvoegen of alles vervangen.'
+			label: 'Volledige export of back-up',
+			accept: '.json,application/json,.zip,application/zip',
+			hint: 'Een JSON-export of back-up-ZIP van 8star (ook van v1.0 en v1.1). Samenvoegen of alles vervangen. Foto’s komen alleen mee uit de back-up-ZIP.'
 		},
 		{
 			id: 'products-csv' as const,

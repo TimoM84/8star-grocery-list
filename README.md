@@ -14,6 +14,16 @@ The UI is in Dutch; code and documentation are in English.
   <img src="docs/screenshots/theme-blue-light.png" width="200" alt="APP_PRIMARY_COLOR=#2563EB" />
 </p>
 
+New in 1.2:
+
+<p>
+  <img src="docs/screenshots/v12-winkelstand-390-light.png" width="200" alt="Winkelstand (shopping mode)" />
+  <img src="docs/screenshots/v12-staat-er-al-op-390-light.png" width="200" alt="Staat er al op: duplicate choices" />
+  <img src="docs/screenshots/v12-acties-390-dark.png" width="200" alt="Item actions in the shop, dark mode" />
+  <img src="docs/screenshots/v12-bundel-390-light.png" width="200" alt="Adding a bundle" />
+  <img src="docs/screenshots/v12-meerdere-390-light.png" width="200" alt="Pasting several lines" />
+</p>
+
 ## Features
 
 **Shopping list**
@@ -35,6 +45,36 @@ The UI is in Dutch; code and documentation are in English.
   and clearing, without ever counting a purchase wrongly.
 - Multiple independent lists (e.g. Supermarkt, Drogist, Markt). Move items between lists.
 
+**In the shop (1.2)**
+
+- **Winkelstand**: a calm shopping mode with large rows, the remaining count, a fixed row order
+  while you shop (ticked rows stay put until you tidy them) and an optional screen wake lock.
+  Items others add meanwhile wait behind a banner and get a “Nieuw” badge.
+- **Shared rounds**: when someone starts shopping, others see it and can join. Items can be
+  claimed (“Ik pak dit”) for 20 minutes so two people don't fetch the same thing. Turn sharing
+  off per device in Beheer.
+- **Niet verkrijgbaar** moves an item to its own section without counting a purchase;
+  **Deels gekocht** records what you got and keeps the rest on the list.
+- Per-item notes, “vervanging mag” with a substitute note, and product photos shown as a small
+  thumbnail.
+
+**Quantities and product memory (1.2)**
+
+- Adding something that is already on the list asks: add extra (atomic increment, so two phones
+  adding at once both count), set the quantity, or cancel. If it is on another list: add here
+  too or move it.
+- Products remember aliases, a usual quantity, a preferred list, a fixed note, a photo and a
+  stock state (enough / low / out). The walking route is set per list.
+- “Niet nu” snoozes are shared by the household.
+
+**Bundles, checklists and pasting (1.2)**
+
+- **Bundels**: reusable sets (e.g. “Pasta-avond”) added with a servings stepper; discrete units
+  are rounded up with a visible warning and per-line choices for items already on the list.
+- **Checklists**: a list kind with a fixed order and reset, which never counts as a purchase.
+- Paste several lines at once (bullets are stripped, commas are kept) or share text from another
+  app to 8star (Android Web Share Target), always with a preview first.
+
 **History and suggestions**
 
 - Every activation and purchase cycle is stored, so the full history is preserved.
@@ -46,6 +86,7 @@ The UI is in Dutch; code and documentation are in English.
 
 **Import, export and external AI** (Beheer → Gegevens)
 
+- **Backup ZIP** (1.2): data plus product photos, restorable in one step.
 - Versioned, complete JSON export with stable ids and ISO 8601 timestamps. Restore it fully
   (**Alles vervangen**, with an automatic pre-import backup and confirmation) or **merge** it into
   existing data.
@@ -129,7 +170,18 @@ e2e/              Playwright: CRUD, lists, history, sync, offline, imports, AI, 
 | `ops`                | Applied operations (idempotency + undo inverse), pruned after 90 days             |
 | `id_aliases`         | Client ids merged into existing entities (concurrent duplicate adds)              |
 | `ai_recommendations` | Imported external AI suggestions (open/accepted/dismissed), separate from history |
+| `media`              | Product photo metadata (files live in `/data/media`)                              |
+| `product_aliases`    | Alternative names that resolve to a product                                       |
+| `snoozes`            | Shared “Niet nu” per product                                                      |
+| `bundles`            | Bundles with default servings                                                     |
+| `bundle_lines`       | Products, quantities and units per bundle                                         |
+| `rounds`             | Shopping rounds per list (one open round per list)                                |
+| `round_participants` | Devices in a round, with heartbeat                                                |
+| `claims`             | “Ik pak dit” claims with expiry                                                   |
 | `meta`               | Global change sequence and data epoch                                             |
+
+Schema 4 (1.2) also adds list kind and walking route, product defaults/stock/photo, item notes,
+substitutes, position and `quantity_rev`, and requested/purchased quantities per cycle.
 
 ## Development
 
@@ -222,7 +274,9 @@ headers including a hash-based CSP, and never contacts external services.
 See [CHANGELOG.md](CHANGELOG.md) for what is covered. Mobile behaviour was verified with
 Playwright's Chromium device emulation at 320/360/390/430/412 px in portrait and landscape,
 light and dark, at 130 % and 160 % font scale, and with a simulated keyboard-open viewport. It
-was **not** tested on a physical Samsung Galaxy A57 or Google Pixel 10.
+was **not** tested on a physical Samsung Galaxy A57 or Google Pixel 10. The 1.2 features (Wake
+Lock, camera capture, Web Share Target) were tested in Chromium only; Share Target needs an
+installed PWA served over HTTPS on Android.
 
 ## License
 

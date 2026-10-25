@@ -33,8 +33,10 @@ test('manages multiple independent lists and moves items between them', async ({
 	await expect(page.getByTestId('page-title')).toHaveText('Kruidvat');
 	await expect.poll(() => activeNames(page)).toEqual(['Shampoo']);
 
-	// Same product may live on both lists independently.
+	// Same product may live on both lists independently, after the "elsewhere" prompt.
 	await addItems(page, 'Melk');
+	await expect(page.getByTestId('add-prompt-elsewhere')).toContainText('Boodschappen');
+	await page.getByTestId('add-prompt-also').click();
 	await expect.poll(() => activeNames(page)).toEqual(['Melk', 'Shampoo']);
 	await row(page, 'Melk').getByTestId('item-toggle').click();
 	await page.getByTestId('list-chip').filter({ hasText: 'Boodschappen' }).click();
