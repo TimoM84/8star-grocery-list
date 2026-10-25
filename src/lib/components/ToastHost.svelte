@@ -29,7 +29,7 @@
 				{#if toast.secondary}
 					<button
 						type="button"
-						class="min-h-12 shrink-0 rounded-xl px-3 font-semibold underline-offset-2 active:bg-white/15"
+						class="min-h-12 max-w-full shrink-0 rounded-xl px-3 font-semibold underline-offset-2 active:bg-white/15"
 						data-testid="toast-secondary"
 						onclick={() => {
 							toast.secondary?.run();
@@ -42,7 +42,7 @@
 				{#if toast.action}
 					<button
 						type="button"
-						class="min-h-12 shrink-0 rounded-xl px-3 font-semibold underline-offset-2 active:bg-white/15"
+						class="min-h-12 max-w-full shrink-0 rounded-xl px-3 font-semibold underline-offset-2 active:bg-white/15"
 						data-testid="toast-action"
 						onclick={() => toast.action?.run()}
 					>
