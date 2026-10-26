@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
 
 Fewer distractions on request, and ticking off only happens where you mean it.
 
@@ -34,6 +34,13 @@ Fewer distractions on request, and ticking off only happens where you mean it.
   (56 × 56 by default) that does not overlap the other buttons, the same on grocery lists,
   checklists and winkelstand. A quick double tap ticks off once instead of undoing itself.
   Labels, keyboard use (Tab, Space/Enter) and the focus ring are kept.
+- The app texts, the AI prompt and the docs name only ChatGPT as an example AI tool. The AI
+  features themselves are unchanged.
+
+### License
+
+- 8star Grocery List is now licensed under the MIT License (`LICENSE`, declared in
+  `package.json`). The README no longer says “All rights reserved”.
 
 ## 1.4.0
 
