@@ -698,13 +698,17 @@ export function applyOp(s: Snapshot, op: LocalOp, aliases: Aliases = new Map()):
 		case 'ai.dismiss':
 			s.aiRecommendations = s.aiRecommendations.filter((r) => r.id !== op.recommendationId);
 			return;
-		case 'settings.update':
+		case 'settings.update': {
+			// An op queued by an older app version may still carry `aiEnabled`.
+			const suggestions = op.suggestionsEnabled ?? (op as { aiEnabled?: boolean }).aiEnabled;
 			s.settings = {
 				...s.settings,
-				...(op.aiEnabled !== undefined && { aiEnabled: op.aiEnabled }),
+				...(suggestions !== undefined && { suggestionsEnabled: suggestions }),
+				...(op.bulkAddEnabled !== undefined && { bulkAddEnabled: op.bulkAddEnabled }),
 				...(op.language !== undefined && { language: op.language })
 			};
 			return;
+		}
 		case 'undo':
 			if (op.restore) applyRestore(s, op.restore, aliases);
 			return;

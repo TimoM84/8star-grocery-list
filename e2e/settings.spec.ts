@@ -31,7 +31,7 @@ async function importRecommendation(page: Page) {
 	expect(res.ok()).toBeTruthy();
 }
 
-test('AI features can be hidden and shown again from Beheer, on every device, without losing data', async ({
+test('suggestions (including AI) can be hidden and shown again from Beheer, on every device, without losing data', async ({
 	page,
 	browser,
 	baseURL
@@ -43,7 +43,7 @@ test('AI features can be hidden and shown again from Beheer, on every device, wi
 	await expect(other.getByTestId('ai-card')).toHaveCount(1);
 
 	// Default: on.
-	const toggle = page.getByTestId('setting-ai');
+	const toggle = page.getByTestId('setting-suggestions');
 	await expect(toggle).toHaveAttribute('aria-checked', 'true');
 	await expect(page.getByTestId('open-gegevens')).toContainText('AI-analyse');
 
@@ -54,7 +54,8 @@ test('AI features can be hidden and shown again from Beheer, on every device, wi
 
 	// Hidden everywhere: Suggesties (also live on the other device), badge count and Gegevens.
 	await expect(other.getByTestId('ai-section')).toHaveCount(0);
-	await expect(other.getByTestId('suggestions-section')).toBeVisible();
+	await expect(other.getByTestId('suggestions-section')).toHaveCount(0);
+	await expect(other.getByTestId('bundles-section')).toBeVisible();
 	await page.goto('/suggesties');
 	await expect(page.getByTestId('ai-section')).toHaveCount(0);
 	await expect(page.getByText('AI-bestand importeren')).toHaveCount(0);
@@ -65,19 +66,27 @@ test('AI features can be hidden and shown again from Beheer, on every device, wi
 
 	// Persisted on the server and survives a reload.
 	const snap = await (await page.request.get('/api/snapshot')).json();
-	expect(snap.settings).toEqual({ aiEnabled: false, language: 'nl' });
+	expect(snap.settings).toEqual({
+		suggestionsEnabled: false,
+		bulkAddEnabled: true,
+		language: 'nl'
+	});
 	expect(snap.aiRecommendations).toHaveLength(1);
 	await page.reload();
 	await expect(page.getByTestId('export-ai-prompt')).toHaveCount(0);
 
 	// Part of the JSON export.
 	const exported = await (await page.request.get('/api/export?format=json')).json();
-	expect(exported.data.settings).toEqual({ aiEnabled: false, language: 'nl' });
+	expect(exported.data.settings).toEqual({
+		suggestionsEnabled: false,
+		bulkAddEnabled: true,
+		language: 'nl'
+	});
 
 	// Switching back on brings the kept suggestion back.
 	await page.goto('/beheer');
-	await page.getByTestId('setting-ai').click();
-	await expect(page.getByTestId('setting-ai')).toHaveAttribute('aria-checked', 'true');
+	await page.getByTestId('setting-suggestions').click();
+	await expect(page.getByTestId('setting-suggestions')).toHaveAttribute('aria-checked', 'true');
 	await expect(other.getByTestId('ai-card')).toHaveCount(1);
 	await other.context().close();
 });

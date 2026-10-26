@@ -100,6 +100,7 @@ export const en = {
 		label: 'Main navigation',
 		list: 'List',
 		suggestions: 'Suggestions',
+		shortcuts: 'Shortcuts',
 		history: 'History',
 		settings: 'Settings',
 		suggestionCount: (n: number) => plural(n, 'suggestion', 'suggestions')
@@ -170,6 +171,7 @@ export const en = {
 		serverRejected: (status: number) => `Photo rejected (HTTP ${status}).`
 	},
 	addBar: {
+		firstLineOnly: 'Only the first line was pasted: “Add several” is switched off.',
 		placeholder: 'What do we need?',
 		add: 'Add',
 		earlier: 'Earlier products',
@@ -200,8 +202,10 @@ export const en = {
 	toast: {
 		datasetReplaced: 'The data was replaced by an import or restore. Your list has been updated.',
 		opFailed: 'The change could not be processed.',
-		aiOn: 'AI features are on for all devices',
-		aiOff: 'AI features hidden on all devices. Nothing was deleted.',
+		suggestionsOn: 'Suggestions are shown on all devices',
+		suggestionsOff: 'Suggestions hidden on all devices. Nothing was deleted.',
+		bulkAddOn: '“Add several” is shown on all devices',
+		bulkAddOff: '“Add several” hidden on all devices. Adding one product still works.',
 		languageChanged: (name: string) => `Language changed to ${name} on all devices`,
 		addedTo: (label: string, list: string) => `${label} added to ${list}`,
 		backOnList: (label: string) => `${label} is back on the list`,
@@ -557,7 +561,8 @@ export const en = {
 	},
 	share: {
 		title: 'Share',
-		opening: 'Opening shared text…'
+		opening: 'Opening shared text…',
+		bulkOff: '“Add several” is switched off, so nothing was added from the shared text.'
 	},
 	suggestions: {
 		addTo: (list: string) => `Add to ${list}`,
@@ -641,9 +646,12 @@ export const en = {
 		language: 'Language',
 		languageHint:
 			'For all devices. Names of products, lists and categories you typed stay as they are.',
-		ai: 'Show AI features',
-		aiHint:
-			'AI suggestions, AI file import and the AI prompt. Applies to all devices; switching off only hides them, nothing is deleted.',
+		suggestions: 'Show suggestions',
+		suggestionsHint:
+			'“Maybe needed”, AI suggestions, AI file import, the AI prompt and the suggestion badge. Typing still shows matching products. Applies to all devices; switching off only hides them, history and suggestions are kept.',
+		bulkAdd: 'Show “Add several”',
+		bulkAddHint:
+			'Enter, paste or share several products at once. Adding one product always works. Applies to all devices.',
 		lists: 'Lists',
 		listsHelp: 'Each list is independent. Tap a name to rename it.',
 		addList: 'List',
@@ -785,15 +793,20 @@ export const en = {
 		exportMissing: 'export.json is missing from the backup.',
 		invalidJson: 'The file is not valid JSON.',
 		replaceNeedsList: 'A full replacement needs at least one list.',
-		aiNotApplied: 'The AI setting from the file was not applied (only when replacing everything).',
+		suggestionsNotApplied:
+			'The suggestions setting from the file was not applied (only when replacing everything).',
+		bulkAddNotApplied:
+			'The “Add several” setting from the file was not applied (only when replacing everything).',
 		languageNotApplied:
 			'The language from the file was not applied (only when replacing everything).',
 		csvUnclosed: 'Unclosed quote in the CSV file.',
 		csvEmpty: 'The CSV file is empty.',
 		failed: (detail: string) => `The import failed and was fully rolled back: ${detail}`,
 		nothingChanged: 'Nothing was changed.',
-		aiSetting: (on: boolean, preview: boolean) =>
-			`AI features ${preview ? 'will be ' : ''}${on ? 'turned on' : 'turned off'} (setting from the file)`,
+		suggestionsSetting: (on: boolean, preview: boolean) =>
+			`Suggestions ${preview ? 'will be ' : ''}${on ? 'shown' : 'hidden'} (setting from the file)`,
+		bulkAddSetting: (on: boolean, preview: boolean) =>
+			`“Add several” ${preview ? 'will be ' : ''}${on ? 'shown' : 'hidden'} (setting from the file)`,
 		languageSetting: (name: string, preview: boolean) =>
 			`Language ${preview ? 'will be ' : ''}set to ${name} (setting from the file)`,
 		photoSkipped: (id: string, detail: string) => `Photo ${id} was skipped: ${detail}`,

@@ -1294,8 +1294,12 @@ export class GroceryStore {
 				return { status: 'applied', productId: rec.product_id };
 			}
 			case 'settings.update':
-				// Hiding features never deletes data: AI suggestions stay stored and come back as is.
-				return writeSettings(this.db, { aiEnabled: op.aiEnabled, language: op.language })
+				// Hiding features never deletes data: suggestions and history stay stored and come back as is.
+				return writeSettings(this.db, {
+					suggestionsEnabled: op.suggestionsEnabled,
+					bulkAddEnabled: op.bulkAddEnabled,
+					language: op.language
+				})
 					? { status: 'applied' }
 					: { status: 'noop', reason: 'unchanged' };
 			case 'undo':

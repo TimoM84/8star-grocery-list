@@ -191,8 +191,13 @@ class AppState {
 			this.now
 		)
 	);
-	/** Household-wide switch (Beheer → Functies): off hides every AI feature, data is kept. */
-	aiEnabled = $derived(this.view?.settings.aiEnabled ?? true);
+	/**
+	 * Household-wide switch (Beheer → Functies): off hides every suggestion ("Misschien nodig",
+	 * AI suggestions, AI import and prompt, badge). Data is kept; autocomplete keeps working.
+	 */
+	suggestionsEnabled = $derived(this.view?.settings.suggestionsEnabled ?? true);
+	/** Household-wide switch (Beheer → Functies): off hides "Meerdere toevoegen". */
+	bulkAddEnabled = $derived(this.view?.settings.bulkAddEnabled ?? true);
 	/** Household-wide UI language (Beheer → Functies). */
 	language = $derived<Language>(this.view?.settings.language ?? this.cachedLanguage);
 	/** Open recommendations imported from an external AI tool (separate from local predictions). */
@@ -349,10 +354,17 @@ class AppState {
 	}
 
 	/** Shared with every device; synced like any other change. */
-	setAiEnabled(on: boolean) {
-		if (on === this.aiEnabled) return;
-		this.run({ type: 'settings.update', aiEnabled: on });
-		toasts.show(on ? m.toast.aiOn : m.toast.aiOff);
+	setSuggestionsEnabled(on: boolean) {
+		if (on === this.suggestionsEnabled) return;
+		this.run({ type: 'settings.update', suggestionsEnabled: on });
+		toasts.show(on ? m.toast.suggestionsOn : m.toast.suggestionsOff);
+	}
+
+	/** Shared with every device; synced like any other change. */
+	setBulkAddEnabled(on: boolean) {
+		if (on === this.bulkAddEnabled) return;
+		this.run({ type: 'settings.update', bulkAddEnabled: on });
+		toasts.show(on ? m.toast.bulkAddOn : m.toast.bulkAddOff);
 	}
 
 	/** Shared with every device; the confirmation is shown in the new language. */

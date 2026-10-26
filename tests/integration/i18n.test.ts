@@ -109,7 +109,7 @@ describe('household language', () => {
 		expect(english.message).toBe('The last list cannot be deleted.');
 
 		expect(apply(s, { type: 'settings.update', language: 'nl' }).status).toBe('applied');
-		expect(s.snapshot().settings).toEqual({ aiEnabled: true, language: 'nl' });
+		expect(s.snapshot().settings).toMatchObject({ suggestionsEnabled: true, language: 'nl' });
 		expect(apply(s, { type: 'list.delete', listId: 'default' }).message).toBe(
 			'De laatste lijst kan niet worden verwijderd.'
 		);
@@ -125,11 +125,15 @@ describe('household language', () => {
 		expect(parseOp({ ...base, language: 'fr' })).toMatchObject({ language: 'fr' });
 		expect(() => parseOp({ ...base, language: 'xx' })).toThrow();
 		expect(() => parseOp(base)).toThrow();
-		// Changing only the language leaves the AI setting alone.
+		// Changing only the language leaves the other settings alone.
 		const s = makeStore();
-		apply(s, { type: 'settings.update', aiEnabled: false });
+		apply(s, { type: 'settings.update', suggestionsEnabled: false, bulkAddEnabled: false });
 		apply(s, { type: 'settings.update', language: 'es' });
-		expect(s.snapshot().settings).toEqual({ aiEnabled: false, language: 'es' });
+		expect(s.snapshot().settings).toEqual({
+			suggestionsEnabled: false,
+			bulkAddEnabled: false,
+			language: 'es'
+		});
 	});
 
 	it('travels in the export; a replace restores it, a merge leaves it', () => {
@@ -155,7 +159,7 @@ describe('household language', () => {
 		const file = buildExport(makeStore().db, 'test') as unknown as {
 			data: { settings: unknown };
 		};
-		file.data.settings = { aiEnabled: true, language: 'klingon' };
+		file.data.settings = { suggestionsEnabled: true, language: 'klingon' };
 		const report = importJson(makeStore(), JSON.stringify(file), 'replace');
 		expect(report.ok).toBe(false);
 		expect(report.errors.join('\n')).toMatch(/settings\.language/);

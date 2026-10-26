@@ -21,22 +21,27 @@ What the app does with AI suggestions:
 - Re-importing the same suggestion is detected and skipped. A newer suggestion for a product
   replaces the older open one, so there is only one open suggestion per product.
 
-## Switching AI off
+## Switching suggestions off
 
-**Beheer → Functies → AI-functies tonen** hides every AI feature for the whole household: the
-AI-suggesties section and its badge count, _AI-bestand importeren_, the _Analyseren met AI_
-block with the AI-opdracht download, and all explanations ("Waarom?"). The app's own
-"Misschien nodig" predictions are not AI and stay visible.
+**Beheer → Functies → Suggesties tonen** (until v1.4 _AI-functies tonen_) hides every
+suggestion for the whole household: the AI-suggesties section, _AI-bestand importeren_, the
+_Analyseren met AI_ block with the AI-opdracht download, all explanations ("Waarom?"), and
+since v1.5 also the app's own "Misschien nodig" predictions, the predicted next purchase in the
+product details and the badge count on the Suggesties tab. Autocomplete while typing is not a
+suggestion and keeps working. A household that had _AI-functies tonen_ switched off has
+_Suggesties tonen_ switched off after upgrading.
 
 - The switch is shared: it is stored on the server and synced to every device like any other
   change (op `settings.update`, see [SYNC.md](SYNC.md)). Offline, it applies right away on the
   device and reaches the others once it is back online.
 - It is **on by default**, so upgrading changes nothing.
-- Switching off only hides. Imported suggestions stay stored, keep their status and come back
-  unchanged when it is switched on again. Exports and backups still contain them.
+- Switching off only hides. Imported suggestions, snoozes and purchase history stay stored,
+  keep their status and come back unchanged when it is switched on again. Exports and backups
+  still contain them.
 - The HTTP API (`/api/import?kind=ai`, `/api/export?format=ai-prompt`) keeps working for
   scripts; the switch is about the app's interface.
-- The setting is part of the JSON export (`data.settings.aiEnabled`) and restored by
+- The setting is part of the JSON export (`data.settings.suggestionsEnabled`; older exports
+  carry `aiEnabled`, which is still read) and restored by
   **Alles vervangen**; see [IMPORT-EXPORT.md](IMPORT-EXPORT.md).
 
 ## File format (version 1)

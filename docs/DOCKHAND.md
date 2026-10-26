@@ -119,7 +119,8 @@ links are never opened. Limits: this only works for the installed PWA in Chromiu
 browsers on Android (not in a normal browser tab, not on iOS, not over plain HTTP), Android may
 need a minute after installation (or a reinstall after an update) before the entry shows up,
 and only text is accepted, not images or files. Without it, copy the text and use **Meerdere**
-in the app. The app has no native home-screen widget; use the PWA shortcuts instead.
+in the app. With **Meerdere toevoegen tonen** switched off (Beheer → Functies), shared text
+adds nothing and the app says so. The app has no native home-screen widget; use the PWA shortcuts instead.
 
 **Screen stays on in winkelstand.** The app asks for a Screen Wake Lock while winkelstand is open
 and visible. It needs HTTPS; battery saver can refuse it. Switch it off in Beheer → Dit

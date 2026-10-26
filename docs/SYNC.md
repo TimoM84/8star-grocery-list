@@ -53,7 +53,7 @@ contains changes nothing.
 
 ## Protocol versions
 
-Every request carries `protocol` (1 = v1.0/v1.1, 2 = v1.2, 3 = v1.3, 4 = v1.4) and every snapshot
+Every request carries `protocol` (1 = v1.0/v1.1, 2 = v1.2, 3 = v1.3, 4 = v1.4, 5 = v1.5) and every snapshot
 reports the server's version. The server keeps accepting **every op type of older protocols**, so a phone
 that still runs v1.1 after the server was upgraded can send its offline queue without losing
 anything. A v1.2 phone that talks to an older server gets op types it doesn't know rejected
@@ -144,21 +144,27 @@ describe the replaced data. Before importing, the importing device sends its own
 first. A restore of a SQLite backup lowers the sequence number instead, and devices handle that
 the same way (see the conflict table).
 
-## Household settings (v1.3, language since v1.4)
+## Household settings (v1.3, language since v1.4, suggestions and bulk add since v1.5)
 
 Settings that apply to every device are stored as `setting.*` rows in the `meta` table and sent
 with every snapshot as `settings`:
 
-| Setting     | Values                       | Default | Meaning                               |
-| ----------- | ---------------------------- | ------- | ------------------------------------- |
-| `aiEnabled` | `true`, `false`              | `true`  | "Show AI features" (v1.3)             |
-| `language`  | `en`, `nl`, `de`, `fr`, `es` | `en`    | UI and server message language (v1.4) |
+| Setting              | Values                       | Default | Meaning                                              |
+| -------------------- | ---------------------------- | ------- | ---------------------------------------------------- |
+| `suggestionsEnabled` | `true`, `false`              | `true`  | "Suggesties tonen" (v1.5, replaces v1.3 `aiEnabled`) |
+| `bulkAddEnabled`     | `true`, `false`              | `true`  | "Meerdere toevoegen tonen" (v1.5)                    |
+| `language`           | `en`, `nl`, `de`, `fr`, `es` | `en`    | UI and server message language (v1.4)                |
+
+`suggestionsEnabled` is stored as `setting.suggestionsEnabled`. Until it is first written, the
+v1.3/v1.4 row `setting.aiEnabled` decides, so a household that had AI switched off keeps all
+suggestions off. Snapshots cached by older app versions and import files with `aiEnabled` are
+read the same way.
 
 They change through one op:
 
-| Op                | Meaning                                                                                                                                             |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `settings.update` | `{ aiEnabled?: boolean, language?: string }`, at least one field. Only the given fields change; applied when a value changes, otherwise `unchanged` |
+| Op                | Meaning                                                                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `settings.update` | `{ suggestionsEnabled?: boolean, bulkAddEnabled?: boolean, language?: string }`, at least one field. Only the given fields change; applied when a value changes, otherwise `unchanged`. `aiEnabled` (protocol 3/4) is accepted as `suggestionsEnabled` |
 
 The language decides the app's text on every device, the server's rejection and conflict
 messages, import reports, the PWA manifest, the HTML shell (`lang`, title) and the AI prompt.
@@ -170,7 +176,7 @@ language.
 
 The op is idempotent, applied optimistically and queued offline like every other op, and it is
 not undoable (switching back is the undo). The last device to send it wins. Snapshots from an
-older server have no `settings`; the app then uses the defaults (`aiEnabled: true`, English), so
+older server have no `settings`; the app then uses the defaults (everything shown, English), so
 nothing is hidden. An older server rejects the op as unknown, which is shown and logged as usual.
 
 ## AI suggestions

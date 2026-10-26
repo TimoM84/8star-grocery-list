@@ -22,17 +22,16 @@
 			.sort((a, b) => STOCK_ORDER[a.product.stockStatus] - STOCK_ORDER[b.product.stockStatus])
 	);
 	let stockEditing = $state<string | null>(null);
+	/** Same label as the tab: without suggestions the page holds bundles, stock and favourites. */
+	const title = $derived(app.suggestionsEnabled ? m.nav.suggestions : m.nav.shortcuts);
 </script>
 
-<svelte:head><title>{m.nav.suggestions} · 8star</title></svelte:head>
+<svelte:head><title>{title} · 8star</title></svelte:head>
 
 <header
 	class="pt-safe sticky top-0 z-20 border-b border-line/60 bg-bg/95 pb-2 backdrop-blur [@media(orientation:landscape)_and_(max-height:560px)]:static"
 >
-	<PageHeader
-		title={m.nav.suggestions}
-		subtitle={m.suggestions.addTo(app.currentList?.name ?? m.common.list)}
-	>
+	<PageHeader {title} subtitle={m.suggestions.addTo(app.currentList?.name ?? m.common.list)}>
 		{#if app.lists.length > 1}
 			<div class="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-label={m.list.chooseList}>
 				{#each app.lists as l (l.id)}
@@ -52,48 +51,48 @@
 </header>
 
 <main class="px-safe mx-auto max-w-2xl space-y-7 pt-4">
-	<section aria-labelledby="maybe" data-testid="suggestions-section">
-		<h2 id="maybe" class="mb-1 flex items-center gap-2 text-lg font-bold">
-			<Icon name="sparkles" size={20} class="text-accent" />
-			{m.list.maybe}
-		</h2>
-		<p class="mb-3 text-sm text-muted">
-			{m.suggestions.maybeHelp}
-		</p>
-		{#if app.suggestions.length === 0}
-			<p class="rounded-2xl bg-surface-2 px-4 py-4 text-muted" data-testid="no-suggestions">
-				{m.suggestions.none(MIN_HISTORY)}
+	{#if app.suggestionsEnabled}
+		<section aria-labelledby="maybe" data-testid="suggestions-section">
+			<h2 id="maybe" class="mb-1 flex items-center gap-2 text-lg font-bold">
+				<Icon name="sparkles" size={20} class="text-accent" />
+				{m.list.maybe}
+			</h2>
+			<p class="mb-3 text-sm text-muted">
+				{m.suggestions.maybeHelp}
 			</p>
-		{:else}
-			<ul class="space-y-2">
-				{#each app.suggestions as s (s.product.id)}
-					<li>
-						<ProductRow
-							view={s}
-							detail="{formatInterval(s.stats.avgIntervalDays)} · {m.suggestions.last(
-								relativeDay(s.stats.lastPurchasedAt, app.now)
-							)} · {m.suggestions.expected(relativeDay(s.stats.nextEstimatedAt, app.now))}"
-						>
-							{#snippet extra()}
-								<button
-									type="button"
-									class="grid w-12 shrink-0 place-items-center text-faint active:bg-surface-2"
-									aria-label={m.suggestions.snooze(s.product.name)}
-									title={m.suggestions.notNow}
-									onclick={() => app.snooze(s)}
-									data-testid="snooze"
-								>
-									<Icon name="x" size={20} />
-								</button>
-							{/snippet}
-						</ProductRow>
-					</li>
-				{/each}
-			</ul>
-		{/if}
-	</section>
+			{#if app.suggestions.length === 0}
+				<p class="rounded-2xl bg-surface-2 px-4 py-4 text-muted" data-testid="no-suggestions">
+					{m.suggestions.none(MIN_HISTORY)}
+				</p>
+			{:else}
+				<ul class="space-y-2">
+					{#each app.suggestions as s (s.product.id)}
+						<li>
+							<ProductRow
+								view={s}
+								detail="{formatInterval(s.stats.avgIntervalDays)} · {m.suggestions.last(
+									relativeDay(s.stats.lastPurchasedAt, app.now)
+								)} · {m.suggestions.expected(relativeDay(s.stats.nextEstimatedAt, app.now))}"
+							>
+								{#snippet extra()}
+									<button
+										type="button"
+										class="grid w-12 shrink-0 place-items-center text-faint active:bg-surface-2"
+										aria-label={m.suggestions.snooze(s.product.name)}
+										title={m.suggestions.notNow}
+										onclick={() => app.snooze(s)}
+										data-testid="snooze"
+									>
+										<Icon name="x" size={20} />
+									</button>
+								{/snippet}
+							</ProductRow>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
-	{#if app.aiEnabled}
 		<AiSuggestions />
 	{/if}
 

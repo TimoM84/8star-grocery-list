@@ -30,9 +30,11 @@ Other CSV datasets: `type=lists`, `type=categories`, `type=list-items`.
 missing ones the product simply has no photo (the report says how many).
 ² CSV imports add products and purchase history; they are not a full restore.
 
-**Household settings** (`data.settings`, e.g. `{ "aiEnabled": false, "language": "nl" }`;
-`aiEnabled` since v1.3, `language` since v1.4) are exported and
-restored by **Alles vervangen**. Files without settings (older exports) keep the current
+**Household settings** (`data.settings`, e.g.
+`{ "suggestionsEnabled": false, "bulkAddEnabled": true, "language": "nl" }`; `language` since
+v1.4, `suggestionsEnabled` and `bulkAddEnabled` since v1.5; v1.3/v1.4 files have `aiEnabled`,
+which is read as `suggestionsEnabled`) are exported and restored by **Alles vervangen**. A
+missing setting keeps its current value. Files without settings (older exports) keep the current
 settings. **Samenvoegen** never changes settings; the report says so when the file's setting
 differs.
 
@@ -189,7 +191,7 @@ no notes, no photo).
 				"resolvedAt": null
 			}
 		],
-		"settings": { "aiEnabled": true, "language": "en" } // optional: household settings
+		"settings": { "suggestionsEnabled": true, "bulkAddEnabled": true, "language": "en" } // optional: household settings
 	},
 	"statistics": [/* derived per product; informational, ignored on import */]
 }

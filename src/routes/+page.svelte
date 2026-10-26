@@ -43,7 +43,7 @@
 		}))
 	);
 	const categoryNames = $derived(new Map((app.view?.categories ?? []).map((c) => [c.id, c.name])));
-	const maybe = $derived(checklist ? [] : app.suggestions.slice(0, 4));
+	const maybe = $derived(checklist || !app.suggestionsEnabled ? [] : app.suggestions.slice(0, 4));
 
 	// ---------------------------------------------------------------- winkelstand
 
@@ -321,15 +321,17 @@
 			{#if showAdd}
 				<div class="mt-2" transition:slide={{ duration: ms(160) }}>
 					<AddBar {onadded} autofocus />
-					<button
-						type="button"
-						class="mt-1 flex min-h-12 items-center gap-2 px-1 text-sm font-semibold text-accent"
-						onclick={() => ui.openSheet('bulk', { listId: app.listId })}
-						data-testid="bulk-open"
-					>
-						<Icon name="paste" size={18} />
-						{m.bulk.title}
-					</button>
+					{#if app.bulkAddEnabled}
+						<button
+							type="button"
+							class="mt-1 flex min-h-12 items-center gap-2 px-1 text-sm font-semibold text-accent"
+							onclick={() => ui.openSheet('bulk', { listId: app.listId })}
+							data-testid="bulk-open"
+						>
+							<Icon name="paste" size={18} />
+							{m.bulk.title}
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -409,30 +411,34 @@
 				>
 			</div>
 		{/if}
-		<div class="flex flex-wrap gap-2">
-			{#if !checklist}
-				<button
-					type="button"
-					class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-ink px-4 text-base font-semibold text-bg active:opacity-90"
-					onclick={() => app.enterShopping()}
-					data-testid="shopping-enter"
-				>
-					<Icon name="cart" size={20} />
-					{m.list.goShopping}
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 text-base font-semibold active:bg-surface-2 {checklist
-					? 'flex-1'
-					: ''}"
-				onclick={() => ui.openSheet('bulk', { listId: app.listId })}
-				data-testid="bulk-open"
-			>
-				<Icon name="paste" size={20} class="text-accent" />
-				{m.list.several}
-			</button>
-		</div>
+		{#if !checklist || app.bulkAddEnabled}
+			<div class="flex flex-wrap gap-2">
+				{#if !checklist}
+					<button
+						type="button"
+						class="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-ink px-4 text-base font-semibold text-bg active:opacity-90"
+						onclick={() => app.enterShopping()}
+						data-testid="shopping-enter"
+					>
+						<Icon name="cart" size={20} />
+						{m.list.goShopping}
+					</button>
+				{/if}
+				{#if app.bulkAddEnabled}
+					<button
+						type="button"
+						class="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-surface px-4 text-base font-semibold active:bg-surface-2 {checklist
+							? 'flex-1'
+							: ''}"
+						onclick={() => ui.openSheet('bulk', { listId: app.listId })}
+						data-testid="bulk-open"
+					>
+						<Icon name="paste" size={20} class="text-accent" />
+						{m.list.several}
+					</button>
+				{/if}
+			</div>
+		{/if}
 		{#if !checklist}
 			<SortControl value={app.sort} onchange={(mode) => app.setSort(mode)} />
 		{/if}

@@ -45,8 +45,10 @@ the English interface (the default) uses the same structure, e.g. **Beheer** is 
   `1.5 kg potatoes`, `eggs x10`, `3 Flaschen Wasser`, `1,5 kg aardappelen`.
 - Live autocomplete from every product you ever added, ranked by frequency, recency and favourites.
 - Duplicates are prevented, ignoring case and whitespace (` HALFVOLLE   melk` = `Halfvolle melk`).
-- Tap a row to tick it off. Completed items turn grey and move into a collapsible section. Tap
-  again to put an item back on the list; it then counts as newly added.
+- Tap the circle on the left to tick an item off (a 56 × 56 px touch area). Completed items turn
+  grey and move into a collapsible section; tap the circle again to put an item back on the
+  list, it then counts as newly added. Tapping the name, quantity or the rest of the row opens
+  the editor (in winkelstand: the actions) and never ticks anything off.
 - Always-visible sort control: **Nieuwste ↓ · Oudste ↑ · A–Z** (case- and accent-insensitive). The choice is
   remembered per device.
 - Optional grouping by category, in a category order you set (e.g. the walking route of your
@@ -109,9 +111,15 @@ the English interface (the default) uses the same structure, e.g. **Beheer** is 
   Suggestions are shown separately from the local predictions, accepted or dismissed with one
   tap, and never touch the list or history by themselves. See
   [docs/AI-RECOMMENDATIONS.md](docs/AI-RECOMMENDATIONS.md).
-- **AI-functies tonen** (Beheer → Functies): one switch for the whole household. Off hides
-  every AI feature (AI-suggesties, AI import, AI-opdracht and their explanations) on all
-  devices; nothing is deleted, and switching it on brings everything back. On by default.
+- **Suggesties tonen** (Beheer → Functies, formerly _AI-functies tonen_): one switch for the
+  whole household. Off hides every suggestion on all devices: _Misschien nodig_ on the list and
+  the Suggesties page, the predicted next purchase, AI-suggesties, AI import, AI-opdracht and
+  the suggestion badge (the tab is then called _Snelkeuze_ and keeps bundles, stock and
+  favourites). Autocomplete while typing keeps working. Nothing is deleted, and switching it on
+  brings everything back. On by default; a household that had AI switched off has it off.
+- **Meerdere toevoegen tonen** (Beheer → Functies): off hides the button for entering several
+  products at once, also in winkelstand. A multi-line paste then only takes the first line and
+  shared text adds nothing. Adding one product always works. On by default.
 
 **Five languages**
 

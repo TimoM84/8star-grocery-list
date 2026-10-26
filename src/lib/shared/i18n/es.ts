@@ -100,6 +100,7 @@ export const es: Messages = {
 		label: 'Navegación principal',
 		list: 'Lista',
 		suggestions: 'Sugerencias',
+		shortcuts: 'Accesos',
 		history: 'Historial',
 		settings: 'Ajustes',
 		suggestionCount: (n) => plural(n, 'sugerencia', 'sugerencias')
@@ -170,6 +171,7 @@ export const es: Messages = {
 		serverRejected: (status) => `Foto rechazada (HTTP ${status}).`
 	},
 	addBar: {
+		firstLineOnly: 'Solo se ha pegado la primera línea: «Añadir varios» está desactivado.',
 		placeholder: '¿Qué necesitamos?',
 		add: 'Añadir',
 		earlier: 'Productos anteriores',
@@ -201,8 +203,11 @@ export const es: Messages = {
 		datasetReplaced:
 			'Los datos se sustituyeron por una importación o restauración. Tu lista se ha actualizado.',
 		opFailed: 'No se pudo procesar el cambio.',
-		aiOn: 'Las funciones de IA están activadas en todos los dispositivos',
-		aiOff: 'Funciones de IA ocultas en todos los dispositivos. No se ha eliminado nada.',
+		suggestionsOn: 'Las sugerencias se muestran en todos los dispositivos',
+		suggestionsOff: 'Sugerencias ocultas en todos los dispositivos. No se ha eliminado nada.',
+		bulkAddOn: '«Añadir varios» se muestra en todos los dispositivos',
+		bulkAddOff:
+			'«Añadir varios» oculto en todos los dispositivos. Añadir un producto sigue funcionando.',
 		languageChanged: (name) => `Idioma cambiado a ${name} en todos los dispositivos`,
 		addedTo: (label, list) => `${label} añadido a ${list}`,
 		backOnList: (label) => `${label} vuelve a estar en la lista`,
@@ -565,7 +570,8 @@ export const es: Messages = {
 	},
 	share: {
 		title: 'Compartir',
-		opening: 'Abriendo texto compartido…'
+		opening: 'Abriendo texto compartido…',
+		bulkOff: '«Añadir varios» está desactivado, así que no se ha añadido nada del texto compartido.'
 	},
 	suggestions: {
 		addTo: (list) => `Añadir a ${list}`,
@@ -650,9 +656,12 @@ export const es: Messages = {
 		language: 'Idioma',
 		languageHint:
 			'Para todos los dispositivos. Los nombres de productos, listas y categorías que escribiste se quedan como están.',
-		ai: 'Mostrar funciones de IA',
-		aiHint:
-			'Sugerencias de IA, importar archivo de IA y las instrucciones de IA. Se aplica a todos los dispositivos; desactivarlas solo las oculta, no se elimina nada.',
+		suggestions: 'Mostrar sugerencias',
+		suggestionsHint:
+			'«Quizá haga falta», sugerencias de IA, importar archivo de IA, las instrucciones de IA y el contador de sugerencias. Al escribir sigues viendo productos que coinciden. Se aplica a todos los dispositivos; desactivarlas solo las oculta, el historial y las sugerencias se conservan.',
+		bulkAdd: 'Mostrar «Añadir varios»',
+		bulkAddHint:
+			'Escribir, pegar o compartir varios productos a la vez. Añadir un producto siempre funciona. Se aplica a todos los dispositivos.',
 		lists: 'Listas',
 		listsHelp: 'Cada lista es independiente. Toca un nombre para cambiarlo.',
 		addList: 'Lista',
@@ -790,14 +799,19 @@ export const es: Messages = {
 		exportMissing: 'Falta export.json en la copia de seguridad.',
 		invalidJson: 'El archivo no es un JSON válido.',
 		replaceNeedsList: 'Una sustitución completa necesita al menos una lista.',
-		aiNotApplied: 'El ajuste de IA del archivo no se ha aplicado (solo al sustituir todo).',
+		suggestionsNotApplied:
+			'El ajuste de sugerencias del archivo no se ha aplicado (solo al sustituir todo).',
+		bulkAddNotApplied:
+			'El ajuste «Añadir varios» del archivo no se ha aplicado (solo al sustituir todo).',
 		languageNotApplied: 'El idioma del archivo no se ha aplicado (solo al sustituir todo).',
 		csvUnclosed: 'Comillas sin cerrar en el archivo CSV.',
 		csvEmpty: 'El archivo CSV está vacío.',
 		failed: (detail) => `La importación falló y se revirtió por completo: ${detail}`,
 		nothingChanged: 'No se ha cambiado nada.',
-		aiSetting: (on, preview) =>
-			`Funciones de IA ${preview ? 'se ' : ''}${preview ? (on ? 'activarán' : 'desactivarán') : on ? 'activadas' : 'desactivadas'} (ajuste del archivo)`,
+		suggestionsSetting: (on, preview) =>
+			`Sugerencias ${preview ? 'se ' : ''}${preview ? (on ? 'mostrarán' : 'ocultarán') : on ? 'mostradas' : 'ocultas'} (ajuste del archivo)`,
+		bulkAddSetting: (on, preview) =>
+			`«Añadir varios» ${preview ? 'se ' : ''}${preview ? (on ? 'mostrará' : 'ocultará') : on ? 'mostrado' : 'oculto'} (ajuste del archivo)`,
 		languageSetting: (name, preview) =>
 			`Idioma ${preview ? 'pasará a ser ' : ''}${name} (ajuste del archivo)`,
 		photoSkipped: (id, detail) => `Foto ${id} omitida: ${detail}`,
