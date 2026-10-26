@@ -284,7 +284,7 @@ export const en = {
 	ai: {
 		title: 'AI suggestions',
 		intro:
-			'From an external AI file (e.g. ChatGPT or Claude). Separate from the own predictions; nothing is ever put on the list automatically.',
+			'From an external AI file (e.g. ChatGPT). Separate from the own predictions; nothing is ever put on the list automatically.',
 		likely: 'estimate: likely',
 		possible: 'estimate: possible',
 		uncertain: 'estimate: uncertain',
@@ -699,7 +699,7 @@ export const en = {
 		aiStep2: [
 			'Give it together with the ',
 			'AI prompt',
-			' to ChatGPT, Claude or your own Python script.'
+			' to ChatGPT or your own Python script.'
 		] as [string, string, string],
 		aiStep3: ['Import the answer under ', 'Suggestions → AI suggestions', '.'] as [
 			string,

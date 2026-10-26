@@ -265,7 +265,7 @@ export const nl: Messages = {
 	ai: {
 		title: 'AI-suggesties',
 		intro:
-			'Uit een extern AI-bestand (bijv. ChatGPT of Claude). Los van de eigen voorspellingen; er wordt nooit automatisch iets op de lijst gezet.',
+			'Uit een extern AI-bestand (bijv. ChatGPT). Los van de eigen voorspellingen; er wordt nooit automatisch iets op de lijst gezet.',
 		likely: 'inschatting: waarschijnlijk',
 		possible: 'inschatting: mogelijk',
 		uncertain: 'inschatting: onzeker',
@@ -685,11 +685,7 @@ export const nl: Messages = {
 			'Kolommen: product en gekocht (verplicht), aantal, eenheid, lijst, categorie, purchase_id. Datums als 2026-10-24T18:30:00Z of 24-10-2026 18:30.',
 		aiTitle: 'Analyseren met AI',
 		aiStep1: ['Download de ', 'volledige export (JSON)', ' hierboven.'],
-		aiStep2: [
-			'Geef die samen met de ',
-			'AI-opdracht',
-			' aan ChatGPT, Claude of je eigen Python-script.'
-		],
+		aiStep2: ['Geef die samen met de ', 'AI-opdracht', ' aan ChatGPT of je eigen Python-script.'],
 		aiStep3: ['Importeer het antwoord bij ', 'Suggesties → AI-suggesties', '.'],
 		aiDownload: 'AI-opdracht downloaden'
 	},

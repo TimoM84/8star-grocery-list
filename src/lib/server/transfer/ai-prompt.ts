@@ -1,4 +1,4 @@
-/** Ready-to-paste instructions for ChatGPT, Claude or other tools (served as a download). */
+/** Ready-to-paste instructions for ChatGPT or other AI tools (served as a download). */
 
 import { messagesFor, type Language } from '$lib/shared/i18n';
 

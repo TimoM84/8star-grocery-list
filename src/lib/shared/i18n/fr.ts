@@ -285,7 +285,7 @@ export const fr: Messages = {
 	ai: {
 		title: 'Suggestions IA',
 		intro:
-			'D’un fichier IA externe (p. ex. ChatGPT ou Claude). Indépendant des prévisions propres ; rien n’est jamais mis sur la liste automatiquement.',
+			'D’un fichier IA externe (p. ex. ChatGPT). Indépendant des prévisions propres ; rien n’est jamais mis sur la liste automatiquement.',
 		likely: 'estimation : probable',
 		possible: 'estimation : possible',
 		uncertain: 'estimation : incertain',
@@ -711,11 +711,7 @@ export const fr: Messages = {
 			'Colonnes : product et purchased_at (obligatoires), quantity, unit, list, category, purchase_id. Dates comme 2026-10-24T18:30:00Z ou 24-10-2026 18:30.',
 		aiTitle: 'Analyser avec l’IA',
 		aiStep1: ['Téléchargez l’', 'export complet (JSON)', ' ci-dessus.'],
-		aiStep2: [
-			'Donnez-le avec la ',
-			'consigne IA',
-			' à ChatGPT, Claude ou votre propre script Python.'
-		],
+		aiStep2: ['Donnez-le avec la ', 'consigne IA', ' à ChatGPT ou votre propre script Python.'],
 		aiStep3: ['Importez la réponse sous ', 'Suggestions → Suggestions IA', '.'],
 		aiDownload: 'Télécharger la consigne IA'
 	},

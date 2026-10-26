@@ -49,7 +49,7 @@ function v110Database(file: string) {
 		INSERT INTO items (id, list_id, product_id, quantity, unit, status, activated_at, completed_at, cycle_id, created_at, updated_at, version)
 			VALUES ('i-melk', 'default', 'p-melk', 2, 'l', 'active', ${T0 + 30 * DAY}, NULL, 'c-melk-open', ${T0}, ${T0 + 30 * DAY}, 9);
 		INSERT INTO ai_recommendations (id, product_id, suggested_quantity, suggested_unit, next_purchase_at, confidence, reasoning, source, batch_id, fingerprint, status, imported_at)
-			VALUES ('ai-1', 'p-wc', 2, 'pak', NULL, 0.7, 'Elke maand', 'Claude', 'b1', 'fp1', 'open', ${T0});
+			VALUES ('ai-1', 'p-wc', 2, 'pak', NULL, 0.7, 'Elke maand', 'ChatGPT', 'b1', 'fp1', 'open', ${T0});
 		INSERT INTO ops (id, type, client_id, received_at, status, result, inverse)
 			VALUES ('old-op', 'item.update', 'c', ${T0}, 'applied', '{"opId":"old-op","status":"applied"}',
 			'{"rows":[{"table":"items","id":"i-melk","before":{"id":"i-melk","list_id":"default","product_id":"p-melk","quantity":1,"unit":"l","status":"active","activated_at":${T0 + 30 * DAY},"completed_at":null,"cycle_id":"c-melk-open","created_at":${T0},"updated_at":${T0},"version":8}}],"guards":[{"table":"items","id":"i-melk","version":9}]}');
