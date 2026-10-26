@@ -14,7 +14,7 @@ source of truth); exports are plain downloads.
 | Aankopen (CSV)          | `GET /api/export?format=csv&type=purchases`  | One row per purchase event                                                                                       |
 | Producten (CSV)         | `GET /api/export?format=csv&type=products`   | Products with stable ids                                                                                         |
 | Statistieken (CSV)      | `GET /api/export?format=csv&type=statistics` | Derived statistics per product                                                                                   |
-| AI-opdracht             | `GET /api/export?format=ai-prompt`           | Instructions for ChatGPT/Claude (see [AI-RECOMMENDATIONS.md](AI-RECOMMENDATIONS.md))                             |
+| AI-opdracht             | `GET /api/export?format=ai-prompt`           | Instructions for an AI tool (see [AI-RECOMMENDATIONS.md](AI-RECOMMENDATIONS.md))                                 |
 
 Other CSV datasets: `type=lists`, `type=categories`, `type=list-items`.
 

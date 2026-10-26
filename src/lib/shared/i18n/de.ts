@@ -286,7 +286,7 @@ export const de: Messages = {
 	ai: {
 		title: 'KI-Vorschläge',
 		intro:
-			'Aus einer externen KI-Datei (z. B. ChatGPT oder Claude). Getrennt von den eigenen Vorhersagen; es wird nie automatisch etwas auf die Liste gesetzt.',
+			'Aus einer externen KI-Datei (z. B. ChatGPT). Getrennt von den eigenen Vorhersagen; es wird nie automatisch etwas auf die Liste gesetzt.',
 		likely: 'Einschätzung: wahrscheinlich',
 		possible: 'Einschätzung: möglich',
 		uncertain: 'Einschätzung: unsicher',
@@ -710,7 +710,7 @@ export const de: Messages = {
 		aiStep2: [
 			'Gib ihn zusammen mit dem ',
 			'KI-Auftrag',
-			' an ChatGPT, Claude oder dein eigenes Python-Skript.'
+			' an ChatGPT oder dein eigenes Python-Skript.'
 		],
 		aiStep3: ['Importiere die Antwort unter ', 'Vorschläge → KI-Vorschläge', '.'],
 		aiDownload: 'KI-Auftrag herunterladen'

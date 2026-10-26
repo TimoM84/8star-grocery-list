@@ -105,7 +105,7 @@ the English interface (the default) uses the same structure, e.g. **Beheer** is 
   products and purchase history.
 - Every import shows a preview first, validates the whole file, detects duplicates, runs in one
   transaction and reports the result in plain language. See [docs/IMPORT-EXPORT.md](docs/IMPORT-EXPORT.md).
-- **AI-suggesties**: analyse your export with ChatGPT, Claude or Python and import the result.
+- **AI-suggesties**: analyse your export with ChatGPT, another AI tool or Python and import the result.
   Suggestions are shown separately from the local predictions, accepted or dismissed with one
   tap, and never touch the list or history by themselves. See
   [docs/AI-RECOMMENDATIONS.md](docs/AI-RECOMMENDATIONS.md).

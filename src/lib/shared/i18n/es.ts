@@ -288,7 +288,7 @@ export const es: Messages = {
 	ai: {
 		title: 'Sugerencias de IA',
 		intro:
-			'De un archivo de IA externo (p. ej. ChatGPT o Claude). Separado de las predicciones propias; nunca se pone nada en la lista automáticamente.',
+			'De un archivo de IA externo (p. ej. ChatGPT). Separado de las predicciones propias; nunca se pone nada en la lista automáticamente.',
 		likely: 'estimación: probable',
 		possible: 'estimación: posible',
 		uncertain: 'estimación: incierta',
@@ -709,7 +709,7 @@ export const es: Messages = {
 		aiStep2: [
 			'Dásela junto con las ',
 			'instrucciones de IA',
-			' a ChatGPT, Claude o tu propio script de Python.'
+			' a ChatGPT o tu propio script de Python.'
 		],
 		aiStep3: ['Importa la respuesta en ', 'Sugerencias → Sugerencias de IA', '.'],
 		aiDownload: 'Descargar instrucciones de IA'

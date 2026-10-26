@@ -1,7 +1,7 @@
 # External AI recommendations
 
 8star has no built-in AI and no API keys. You can analyse your own data with any tool (ChatGPT,
-Claude, a local model or a Python script) and import the result as **AI-suggesties**:
+a local model or a Python script) and import the result as **AI-suggesties**:
 
 1. **Beheer → Gegevens → Volledige export (JSON)**, or the CSV ZIP for spreadsheets/pandas.
 2. **Beheer → Gegevens → AI-opdracht downloaden** (Settings → Data → Download AI prompt):
@@ -70,7 +70,7 @@ block with the AI-opdracht download, and all explanations ("Waarom?"). The app's
 | ------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
 | `format`            | yes      | exactly `"8star-ai-recommendations"`                                                                        |
 | `formatVersion`     | yes      | `1`                                                                                                         |
-| `source`            | no       | shown in the app, max 80 characters (e.g. `"ChatGPT"`, `"Claude"`, `"pandas-script"`)                       |
+| `source`            | no       | shown in the app, max 80 characters (e.g. `"ChatGPT"`, `"pandas-script"`)                                   |
 | `generatedAt`       | no       | ISO 8601, informational                                                                                     |
 | `recommendations`   | yes      | 1–1000 entries                                                                                              |
 | `productId`         | yes      | an existing `data.products[].id` from the export; unknown ids are skipped with a warning                    |
