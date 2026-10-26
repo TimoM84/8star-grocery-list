@@ -173,9 +173,12 @@ export function runImport(store: GroceryStore, options: ImportOptions): ImportRe
 					} else {
 						mergeDataset(store, data, count, report, now);
 						const current = readSettings(store.db);
-						const ai = data.settings?.aiEnabled;
-						if (ai !== undefined && ai !== current.aiEnabled)
-							settingNotes.push(t.import.aiNotApplied);
+						const suggestions = data.settings?.suggestionsEnabled;
+						if (suggestions !== undefined && suggestions !== current.suggestionsEnabled)
+							settingNotes.push(t.import.suggestionsNotApplied);
+						const bulkAdd = data.settings?.bulkAddEnabled;
+						if (bulkAdd !== undefined && bulkAdd !== current.bulkAddEnabled)
+							settingNotes.push(t.import.bulkAddNotApplied);
 						const language = data.settings?.language;
 						if (language !== undefined && language !== current.language)
 							settingNotes.push(t.import.languageNotApplied);
@@ -309,9 +312,11 @@ function applySettings(
 	t: Messages
 ): string[] {
 	const notes: string[] = [];
-	const { aiEnabled, language } = d.settings ?? {};
-	if (aiEnabled !== undefined && writeSettings(store.db, { aiEnabled }))
-		notes.push(t.import.aiSetting(aiEnabled, preview));
+	const { suggestionsEnabled, bulkAddEnabled, language } = d.settings ?? {};
+	if (suggestionsEnabled !== undefined && writeSettings(store.db, { suggestionsEnabled }))
+		notes.push(t.import.suggestionsSetting(suggestionsEnabled, preview));
+	if (bulkAddEnabled !== undefined && writeSettings(store.db, { bulkAddEnabled }))
+		notes.push(t.import.bulkAddSetting(bulkAddEnabled, preview));
 	if (language !== undefined && writeSettings(store.db, { language }))
 		notes.push(t.import.languageSetting(LANGUAGE_NAMES[language], preview));
 	return notes;

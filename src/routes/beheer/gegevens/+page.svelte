@@ -114,7 +114,7 @@
 		</ul>
 	</section>
 
-	{#if app.aiEnabled}
+	{#if app.suggestionsEnabled}
 		<section aria-labelledby="ai-title" class="rounded-2xl bg-accent-soft/60 p-4">
 			<h2 id="ai-title" class="mb-2 flex items-center gap-2 text-lg font-bold">
 				<Icon name="brain" size={20} class="text-accent" />

@@ -262,29 +262,31 @@
 					{/each}
 				</div>
 			</fieldset>
-			<button
-				type="button"
-				role="switch"
-				aria-checked={app.aiEnabled}
-				class="flex min-h-12 w-full items-center gap-3 text-left"
-				onclick={() => app.setAiEnabled(!app.aiEnabled)}
-				data-testid="setting-ai"
-			>
-				<span class="min-w-0 flex-1">
-					<span class="block font-semibold">{m.settings.ai}</span>
-					<span class="block text-sm text-muted">{m.settings.aiHint}</span>
-				</span>
-				<span
-					class="relative h-8 w-14 shrink-0 rounded-full transition-colors {app.aiEnabled
-						? 'bg-accent'
-						: 'bg-surface-3'}"
-					><span
-						class="absolute top-1 h-6 w-6 rounded-full bg-surface shadow transition-all {app.aiEnabled
-							? 'left-7'
-							: 'left-1'}"
-					></span></span
+			{#each [{ id: 'suggestions', label: m.settings.suggestions, hint: m.settings.suggestionsHint, on: app.suggestionsEnabled, set: (v: boolean) => app.setSuggestionsEnabled(v) }, { id: 'bulk', label: m.settings.bulkAdd, hint: m.settings.bulkAddHint, on: app.bulkAddEnabled, set: (v: boolean) => app.setBulkAddEnabled(v) }] as t (t.id)}
+				<button
+					type="button"
+					role="switch"
+					aria-checked={t.on}
+					class="flex min-h-12 w-full items-center gap-3 text-left"
+					onclick={() => t.set(!t.on)}
+					data-testid="setting-{t.id}"
 				>
-			</button>
+					<span class="min-w-0 flex-1">
+						<span class="block font-semibold">{t.label}</span>
+						<span class="block text-sm text-muted">{t.hint}</span>
+					</span>
+					<span
+						class="relative h-8 w-14 shrink-0 rounded-full transition-colors {t.on
+							? 'bg-accent'
+							: 'bg-surface-3'}"
+						><span
+							class="absolute top-1 h-6 w-6 rounded-full bg-surface shadow transition-all {t.on
+								? 'left-7'
+								: 'left-1'}"
+						></span></span
+					>
+				</button>
+			{/each}
 		</div>
 	</section>
 
@@ -350,7 +352,7 @@
 				<span class="min-w-0 flex-1">
 					<span class="block">{m.settings.importExport}</span>
 					<span class="block text-sm font-normal text-muted"
-						>{app.aiEnabled ? m.settings.formatsAi : m.settings.formats}</span
+						>{app.suggestionsEnabled ? m.settings.formatsAi : m.settings.formats}</span
 					>
 				</span>
 				<Icon name="arrowRight" size={18} class="shrink-0 text-faint" />

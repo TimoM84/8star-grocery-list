@@ -7,13 +7,16 @@
 	// Test ids stay Dutch (the route names) whatever the UI language.
 	const tabs = $derived<{ href: string; id: string; label: string; icon: IconName }[]>([
 		{ href: '/', id: 'lijst', label: m.nav.list, icon: 'list' },
-		{ href: '/suggesties', id: 'suggesties', label: m.nav.suggestions, icon: 'sparkles' },
+		// With suggestions switched off the tab only holds bundles, stock and favourites.
+		app.suggestionsEnabled
+			? { href: '/suggesties', id: 'suggesties', label: m.nav.suggestions, icon: 'sparkles' }
+			: { href: '/suggesties', id: 'suggesties', label: m.nav.shortcuts, icon: 'layers' },
 		{ href: '/historie', id: 'historie', label: m.nav.history, icon: 'history' },
 		{ href: '/beheer', id: 'beheer', label: m.nav.settings, icon: 'settings' }
 	]);
 
 	const suggestionCount = $derived(
-		app.suggestions.length + (app.aiEnabled ? app.aiRecommendations.length : 0)
+		app.suggestionsEnabled ? app.suggestions.length + app.aiRecommendations.length : 0
 	);
 </script>
 
@@ -46,7 +49,8 @@
 							{#if tab.href === '/suggesties' && suggestionCount > 0}
 								<span
 									class="absolute -top-[6px] left-[14px] h-[20px] min-w-[20px] rounded-full bg-accent px-[4px] text-center text-[11px] leading-[20px] font-bold text-on-accent"
-									aria-label={m.nav.suggestionCount(suggestionCount)}>{suggestionCount}</span
+									aria-label={m.nav.suggestionCount(suggestionCount)}
+									data-testid="nav-badge">{suggestionCount}</span
 								>
 							{/if}
 						</span>

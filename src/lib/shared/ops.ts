@@ -10,10 +10,11 @@ import { LANGUAGES, type Language } from './i18n';
 
 /**
  * Sync protocol version. 1 = v1.0/v1.1, 2 = v1.2 (intent ops, rounds, bundles…), 3 = v1.3
- * (shared settings), 4 = v1.4 (household language). Servers keep accepting every op type of
- * older protocols; see docs/SYNC.md.
+ * (shared settings), 4 = v1.4 (household language), 5 = v1.5 (`suggestionsEnabled` replaces
+ * `aiEnabled`, `bulkAddEnabled`). Servers keep accepting every op type of older protocols; see
+ * docs/SYNC.md.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 export interface ItemChanges {
 	quantity?: number | null;
@@ -140,7 +141,12 @@ export type OpPayload =
 	| { type: 'round.end'; roundId: string; deviceId: string }
 	| { type: 'ai.accept'; recommendationId: string; listId: string; itemId: string }
 	| { type: 'ai.dismiss'; recommendationId: string }
-	| { type: 'settings.update'; aiEnabled?: boolean; language?: Language }
+	| {
+			type: 'settings.update';
+			suggestionsEnabled?: boolean;
+			bulkAddEnabled?: boolean;
+			language?: Language;
+	  }
 	| { type: 'undo'; targetOpId: string };
 
 export type Op = OpBase & OpPayload;
@@ -626,9 +632,19 @@ export function parseOp(raw: unknown): Op {
 		case 'settings.update': {
 			// Each setting is optional: an op changes only the settings it carries.
 			const op: Extract<Op, { type: 'settings.update' }> = { ...base, type: 'settings.update' };
-			if (raw.aiEnabled !== undefined) op.aiEnabled = bool(raw.aiEnabled, 'aiEnabled');
+			if (raw.suggestionsEnabled !== undefined)
+				op.suggestionsEnabled = bool(raw.suggestionsEnabled, 'suggestionsEnabled');
+			// Protocol 3/4 clients still send the old "Show AI features" switch.
+			else if (raw.aiEnabled !== undefined)
+				op.suggestionsEnabled = bool(raw.aiEnabled, 'aiEnabled');
+			if (raw.bulkAddEnabled !== undefined)
+				op.bulkAddEnabled = bool(raw.bulkAddEnabled, 'bulkAddEnabled');
 			if (raw.language !== undefined) op.language = oneOf(raw.language, LANGUAGES, 'language');
-			if (op.aiEnabled === undefined && op.language === undefined)
+			if (
+				op.suggestionsEnabled === undefined &&
+				op.bulkAddEnabled === undefined &&
+				op.language === undefined
+			)
 				throw new ValidationError('no changes');
 			return op;
 		}

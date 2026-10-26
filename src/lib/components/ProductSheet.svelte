@@ -138,14 +138,14 @@
 			<ProductMemory {product} />
 
 			<dl class="grid grid-cols-2 gap-2" data-testid="product-stats">
-				{#each [[m.productSheet.timesBought, String(stats.purchaseCount)], [m.productSheet.lastBought, relativeDay(stats.lastPurchasedAt, app.now)], [m.productSheet.avgInterval, formatInterval(stats.avgIntervalDays)], [m.productSheet.frequency, formatPerMonth(stats.perMonth)], [m.productSheet.next, stats.nextEstimatedAt ? relativeDay(stats.nextEstimatedAt, app.now) : '—'], [m.productSheet.firstAdded, formatDate(product.createdAt, app.now)]] as [label, value] (label)}
+				{#each [[m.productSheet.timesBought, String(stats.purchaseCount)], [m.productSheet.lastBought, relativeDay(stats.lastPurchasedAt, app.now)], [m.productSheet.avgInterval, formatInterval(stats.avgIntervalDays)], [m.productSheet.frequency, formatPerMonth(stats.perMonth)], ...(app.suggestionsEnabled ? [[m.productSheet.next, stats.nextEstimatedAt ? relativeDay(stats.nextEstimatedAt, app.now) : '—']] : []), [m.productSheet.firstAdded, formatDate(product.createdAt, app.now)]] as [label, value] (label)}
 					<div class="rounded-2xl bg-surface-2 px-3.5 py-3">
 						<dt class="text-sm text-muted">{label}</dt>
 						<dd class="text-lg font-semibold [overflow-wrap:anywhere]">{value}</dd>
 					</div>
 				{/each}
 			</dl>
-			{#if !stats.hasEnoughHistory}
+			{#if app.suggestionsEnabled && !stats.hasEnoughHistory}
 				<p class="flex gap-2 text-sm text-muted">
 					<Icon name="info" size={18} class="mt-0.5 shrink-0" />
 					{m.productSheet.needHistory(MIN_HISTORY)}

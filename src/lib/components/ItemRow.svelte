@@ -44,6 +44,17 @@
 				: m.itemRow.claimedBy(claim.deviceName ?? m.common.someoneElse)
 	);
 	const photo = $derived(product.photoId ? app.photoUrl(product.photoId) : null);
+
+	/** A quick second tap (double tap, bouncing finger) would undo the first one. */
+	const TOGGLE_GUARD_MS = 400;
+	let lastToggle = -Infinity;
+	function toggle(e: MouseEvent) {
+		e.stopPropagation();
+		const now = performance.now();
+		if (now - lastToggle < TOGGLE_GUARD_MS) return;
+		lastToggle = now;
+		ontoggle();
+	}
 </script>
 
 <div
@@ -56,21 +67,33 @@
 	data-status={unavailable ? 'unavailable' : item.status}
 	data-name={product.name}
 >
+	<!-- Only the circle ticks off or puts back. Its touch area is the full row height and at
+	     least 48×48 CSS px, and it never overlaps the other actions. -->
 	<button
 		type="button"
-		class="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2.5 pr-2 pl-3.5 text-left active:bg-surface-2"
+		class="group grid min-h-14 w-14 shrink-0 place-items-center self-stretch -outline-offset-4 active:bg-surface-2"
 		aria-label={done ? m.itemRow.putBack(product.name) : m.itemRow.tick(product.name)}
 		aria-pressed={done}
-		onclick={ontoggle}
+		onclick={toggle}
 		data-testid="item-toggle"
 	>
 		<span
-			class="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 transition-all duration-200 {done
+			class="grid h-8 w-8 place-items-center rounded-full border-[2.5px] transition-all duration-200 {done
 				? 'border-done bg-done text-surface'
-				: 'border-faint'}"
+				: 'border-muted bg-surface group-hover:border-accent group-active:border-accent group-active:bg-accent-soft'}"
+			data-testid="item-check"
 		>
-			{#if done}<Icon name="check" size={16} stroke={3} />{/if}
+			{#if done}<Icon name="check" size={18} stroke={3} />{/if}
 		</span>
+	</button>
+	<!-- Tapping the rest of the row opens the same editor as the pencil (keyboard and screen
+	     readers use that button), so a tap on the name or quantity never changes the status. -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div
+		class="flex min-h-14 min-w-0 flex-1 cursor-pointer touch-manipulation items-center gap-3 py-2.5 pr-2 text-left active:bg-surface-2"
+		onclick={onedit}
+		data-testid="item-body"
+	>
 		<span class="min-w-0 flex-1">
 			<span
 				class="block text-[1.0625rem] leading-snug font-medium [overflow-wrap:anywhere] {done
@@ -136,7 +159,7 @@
 				data-testid="item-qty">{qty}</span
 			>
 		{/if}
-	</button>
+	</div>
 	{#if photo && !done}
 		<button
 			type="button"

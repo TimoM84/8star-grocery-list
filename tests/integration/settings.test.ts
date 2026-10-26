@@ -11,7 +11,7 @@ import { buildExport } from '$lib/server/transfer/format';
 import { runImport, type ImportMode } from '$lib/server/transfer/importer';
 import { applyOps, cloneSnapshot } from '$lib/shared/reducer';
 import { parseOp, type Op, type OpPayload } from '$lib/shared/ops';
-import { DEFAULT_SETTINGS } from '$lib/shared/settings';
+import { DEFAULT_SETTINGS, LEGACY_AI_KEY } from '$lib/shared/settings';
 import type { Snapshot } from '$lib/shared/types';
 
 const T0 = Date.UTC(2026, 9, 1, 10);
@@ -26,8 +26,17 @@ function apply(store: GroceryStore, payload: OpPayload, at = T0) {
 	return store.applyOps('test', [op], at).results[0];
 }
 
-const setAi = (store: GroceryStore, aiEnabled: boolean) =>
-	apply(store, { type: 'settings.update', aiEnabled });
+const setSuggestions = (store: GroceryStore, suggestionsEnabled: boolean) =>
+	apply(store, { type: 'settings.update', suggestionsEnabled });
+const setBulkAdd = (store: GroceryStore, bulkAddEnabled: boolean) =>
+	apply(store, { type: 'settings.update', bulkAddEnabled });
+
+/** Writes the pre-v1.5 "AI-functies tonen" row as v1.3/v1.4 left it in the database. */
+function setLegacyAi(store: GroceryStore, on: boolean) {
+	store.db
+		.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)')
+		.run(LEGACY_AI_KEY, JSON.stringify(on));
+}
 
 /** A store with one product and one open AI recommendation. */
 function storeWithRecommendation() {
@@ -73,58 +82,167 @@ function importFile(
 }
 
 describe('settings.update op', () => {
-	it('defaults to AI on, so existing installations keep their behaviour', () => {
-		expect(DEFAULT_SETTINGS.aiEnabled).toBe(true);
-		expect(makeStore().snapshot().settings).toEqual({ aiEnabled: true, language: 'en' });
+	it('defaults to everything shown, so existing installations keep their behaviour', () => {
+		expect(DEFAULT_SETTINGS.suggestionsEnabled).toBe(true);
+		expect(DEFAULT_SETTINGS.bulkAddEnabled).toBe(true);
+		expect(makeStore().snapshot().settings).toEqual({
+			suggestionsEnabled: true,
+			bulkAddEnabled: true,
+			language: 'en'
+		});
 	});
 
-	it('switches AI off and on, shared through the snapshot, and is a no-op when unchanged', () => {
+	it('switches suggestions off and on, shared through the snapshot, and is a no-op when unchanged', () => {
 		const s = makeStore();
 		const seq = s.seq;
-		expect(setAi(s, false).status).toBe('applied');
+		expect(setSuggestions(s, false).status).toBe('applied');
 		expect(s.seq).toBe(seq + 1);
-		expect(s.snapshot().settings.aiEnabled).toBe(false);
-		const again = setAi(s, false);
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(false);
+		const again = setSuggestions(s, false);
 		expect(again).toMatchObject({ status: 'noop', reason: 'unchanged' });
 		expect(s.seq).toBe(seq + 1);
-		expect(setAi(s, true).status).toBe('applied');
-		expect(s.snapshot().settings.aiEnabled).toBe(true);
+		expect(setSuggestions(s, true).status).toBe('applied');
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(true);
 	});
 
 	it('is idempotent per op id', () => {
 		const s = makeStore();
-		const op = { id: 'same', at: T0, type: 'settings.update', aiEnabled: false } as Op;
+		const op = { id: 'same', at: T0, type: 'settings.update', suggestionsEnabled: false } as Op;
 		expect(s.applyOps('a', [op], T0).results[0].status).toBe('applied');
-		setAi(s, true);
+		setSuggestions(s, true);
 		// A resent op returns the stored result and does not switch AI off again.
 		expect(s.applyOps('a', [op], T0).results[0].status).toBe('applied');
-		expect(s.snapshot().settings.aiEnabled).toBe(true);
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(true);
 	});
 
 	it('persists across a server restart', () => {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), '8star-settings-db-'));
 		const file = path.join(dir, 'db.sqlite');
 		const a = makeStore(file);
-		setAi(a, false);
+		setSuggestions(a, false);
 		a.db.close();
-		expect(makeStore(file).snapshot().settings.aiEnabled).toBe(false);
+		expect(makeStore(file).snapshot().settings.suggestionsEnabled).toBe(false);
 	});
 
-	it('never deletes AI data: recommendations are kept and come back when switched on', () => {
+	it('never deletes data: AI recommendations are kept and come back when switched on', () => {
 		const s = storeWithRecommendation();
-		setAi(s, false);
+		setSuggestions(s, false);
 		expect(s.snapshot().aiRecommendations).toHaveLength(1);
-		setAi(s, true);
+		setSuggestions(s, true);
 		expect(s.snapshot().aiRecommendations).toHaveLength(1);
 	});
 
 	it('rejects malformed values', () => {
-		expect(() => parseOp({ id: 'x', at: T0, type: 'settings.update', aiEnabled: 'nee' })).toThrow(
-			/aiEnabled/
-		);
+		for (const key of ['suggestionsEnabled', 'bulkAddEnabled', 'aiEnabled'])
+			expect(() => parseOp({ id: 'x', at: T0, type: 'settings.update', [key]: 'nee' })).toThrow(
+				new RegExp(key)
+			);
 		expect(() => parseOp({ id: 'x', at: T0, type: 'settings.update' })).toThrow();
 		const r = makeStore().applyOps('a', [{ id: 'bad', at: T0, type: 'settings.update' }], T0);
 		expect(r.results[0].status).toBe('rejected');
+	});
+});
+
+describe('"Suggesties tonen" takes over "AI-functies tonen"', () => {
+	it('a household that had AI switched off gets all suggestions switched off', () => {
+		const s = makeStore();
+		setLegacyAi(s, false);
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(false);
+		// Unchanged until someone flips the new switch, which then wins over the old row.
+		expect(setSuggestions(s, false)).toMatchObject({ status: 'noop', reason: 'unchanged' });
+		expect(setSuggestions(s, true).status).toBe('applied');
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(true);
+		setLegacyAi(s, false);
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(true);
+	});
+
+	it('a household that had AI on keeps suggestions on', () => {
+		const s = makeStore();
+		setLegacyAi(s, true);
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(true);
+	});
+
+	it('accepts the old op field from a device that has not updated yet', () => {
+		const op = parseOp({ id: 'x', at: T0, type: 'settings.update', aiEnabled: false });
+		expect(op).toMatchObject({ type: 'settings.update', suggestionsEnabled: false });
+		const s = makeStore();
+		expect(s.applyOps('old', [op], T0).results[0].status).toBe('applied');
+		expect(s.snapshot().settings.suggestionsEnabled).toBe(false);
+	});
+
+	it('restores the old setting from a v1.3/v1.4 export', () => {
+		const file = buildExport(makeStore().db, 'test') as unknown as {
+			data: { settings: unknown };
+		};
+		file.data.settings = { aiEnabled: false, language: 'en' };
+		const target = makeStore();
+		const report = importFile(target, 'json', JSON.stringify(file), 'replace');
+		expect(report.ok, report.errors.join('\n')).toBe(true);
+		expect(target.snapshot().settings).toEqual({
+			suggestionsEnabled: false,
+			bulkAddEnabled: true,
+			language: 'en'
+		});
+	});
+});
+
+describe('"Meerdere toevoegen tonen"', () => {
+	it('switches off and on independently of the other settings, and persists', () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), '8star-settings-db-'));
+		const file = path.join(dir, 'db.sqlite');
+		const a = makeStore(file);
+		expect(setBulkAdd(a, false).status).toBe('applied');
+		expect(setBulkAdd(a, false)).toMatchObject({ status: 'noop', reason: 'unchanged' });
+		expect(a.snapshot().settings).toEqual({
+			suggestionsEnabled: true,
+			bulkAddEnabled: false,
+			language: 'en'
+		});
+		a.db.close();
+		const b = makeStore(file);
+		expect(b.snapshot().settings.bulkAddEnabled).toBe(false);
+		expect(setBulkAdd(b, true).status).toBe('applied');
+		expect(b.snapshot().settings.bulkAddEnabled).toBe(true);
+	});
+
+	it('a replace restores it and reports it, a merge leaves it and says so', () => {
+		const source = makeStore();
+		setBulkAdd(source, false);
+		const file = JSON.stringify(buildExport(source.db, 'test'));
+
+		const replaced = makeStore();
+		const report = importFile(replaced, 'json', file, 'replace');
+		expect(report.ok, report.errors.join('\n')).toBe(true);
+		expect(report.summary).toContain('“Add several” hidden (setting from the file)');
+		expect(replaced.snapshot().settings.bulkAddEnabled).toBe(false);
+
+		const merged = makeStore();
+		const merge = importFile(merged, 'json', file, 'merge');
+		expect(merge.ok, merge.errors.join('\n')).toBe(true);
+		expect(merged.snapshot().settings.bulkAddEnabled).toBe(true);
+		expect(merge.summary.join('\n')).toContain('The “Add several” setting from the file');
+	});
+
+	it('an export without the setting stays importable and keeps the current value', () => {
+		const file = buildExport(makeStore().db, 'test') as unknown as {
+			data: { settings: Record<string, unknown> };
+		};
+		delete file.data.settings.bulkAddEnabled;
+		const target = makeStore();
+		setBulkAdd(target, false);
+		const report = importFile(target, 'json', JSON.stringify(file), 'replace');
+		expect(report.ok, report.errors.join('\n')).toBe(true);
+		expect(target.snapshot().settings.bulkAddEnabled).toBe(false);
+	});
+
+	it('rejects an invalid value in an import file', () => {
+		const file = buildExport(makeStore().db, 'test') as unknown as {
+			data: { settings: unknown };
+		};
+		file.data.settings = { bulkAddEnabled: 'nee' };
+		const report = importFile(makeStore(), 'json', JSON.stringify(file), 'replace');
+		expect(report.ok).toBe(false);
+		expect(report.errors.join('\n')).toContain('settings.bulkAddEnabled');
 	});
 });
 
@@ -134,35 +252,52 @@ describe('optimistic reducer', () => {
 		const old = { ...snap } as Partial<Snapshot>;
 		delete old.settings;
 		const cloned = cloneSnapshot(old as Snapshot);
-		expect(cloned.settings).toEqual({ aiEnabled: true, language: 'en' });
-		const op = { id: 'o', at: T0, type: 'settings.update', aiEnabled: false } as Op;
-		expect(applyOps(cloned, [op], new Map()).settings.aiEnabled).toBe(false);
+		expect(cloned.settings).toEqual({
+			suggestionsEnabled: true,
+			bulkAddEnabled: true,
+			language: 'en'
+		});
+		const op = { id: 'o', at: T0, type: 'settings.update', suggestionsEnabled: false } as Op;
+		expect(applyOps(cloned, [op], new Map()).settings.suggestionsEnabled).toBe(false);
+		// A snapshot cached by v1.3/v1.4 and an op still queued by that version.
+		const cached = cloneSnapshot({
+			...snap,
+			settings: { aiEnabled: false }
+		} as unknown as Snapshot);
+		expect(cached.settings.suggestionsEnabled).toBe(false);
+		const queued = { id: 'q', at: T0, type: 'settings.update', aiEnabled: true } as unknown as Op;
+		expect(applyOps(cached, [queued], new Map()).settings.suggestionsEnabled).toBe(true);
 	});
 });
 
 describe('export and import', () => {
 	it('exports the settings', () => {
 		const s = makeStore();
-		setAi(s, false);
-		expect(buildExport(s.db, 'test').data.settings).toEqual({ aiEnabled: false, language: 'en' });
+		setSuggestions(s, false);
+		setBulkAdd(s, false);
+		expect(buildExport(s.db, 'test').data.settings).toEqual({
+			suggestionsEnabled: false,
+			bulkAddEnabled: false,
+			language: 'en'
+		});
 	});
 
 	it('a full replace restores the setting from the file and reports it', () => {
 		const source = storeWithRecommendation();
-		setAi(source, false);
+		setSuggestions(source, false);
 		const file = JSON.stringify(buildExport(source.db, 'test'));
 		const target = makeStore();
 
 		const preview = importFile(target, 'json', file, 'replace', true);
 		expect(preview.ok, preview.errors.join('\n')).toBe(true);
-		expect(preview.summary).toContain('AI features will be turned off (setting from the file)');
-		expect(target.snapshot().settings.aiEnabled).toBe(true);
+		expect(preview.summary).toContain('Suggestions will be hidden (setting from the file)');
+		expect(target.snapshot().settings.suggestionsEnabled).toBe(true);
 
 		const report = importFile(target, 'json', file, 'replace');
 		expect(report.ok, report.errors.join('\n')).toBe(true);
-		expect(report.summary).toContain('AI features turned off (setting from the file)');
+		expect(report.summary).toContain('Suggestions hidden (setting from the file)');
 		const snap = target.snapshot();
-		expect(snap.settings.aiEnabled).toBe(false);
+		expect(snap.settings.suggestionsEnabled).toBe(false);
 		// The AI data in the file is restored as well, just hidden.
 		expect(snap.aiRecommendations).toHaveLength(1);
 	});
@@ -172,33 +307,35 @@ describe('export and import', () => {
 		const file = buildExport(source.db, 'test');
 		delete file.data.settings;
 		const target = makeStore();
-		setAi(target, false);
+		setSuggestions(target, false);
 		const report = importFile(target, 'json', JSON.stringify(file), 'replace');
 		expect(report.ok, report.errors.join('\n')).toBe(true);
-		expect(target.snapshot().settings.aiEnabled).toBe(false);
+		expect(target.snapshot().settings.suggestionsEnabled).toBe(false);
 	});
 
 	it('a merge never changes the setting and says so', () => {
 		const source = makeStore();
-		setAi(source, false);
+		setSuggestions(source, false);
 		const file = JSON.stringify(buildExport(source.db, 'test'));
 		const target = makeStore();
 		const report = importFile(target, 'json', file, 'merge');
 		expect(report.ok, report.errors.join('\n')).toBe(true);
-		expect(target.snapshot().settings.aiEnabled).toBe(true);
-		expect(report.summary.join('\n')).toContain('The AI setting from the file was not applied');
+		expect(target.snapshot().settings.suggestionsEnabled).toBe(true);
+		expect(report.summary.join('\n')).toContain(
+			'The suggestions setting from the file was not applied'
+		);
 	});
 
 	it('rejects an invalid settings value without changing anything', () => {
 		const file = buildExport(makeStore().db, 'test') as unknown as {
 			data: { settings: unknown };
 		};
-		file.data.settings = { aiEnabled: 'uit' };
+		file.data.settings = { suggestionsEnabled: 'uit' };
 		const target = makeStore();
 		const report = importFile(target, 'json', JSON.stringify(file), 'replace');
 		expect(report.ok).toBe(false);
-		expect(report.errors.join('\n')).toContain('settings.aiEnabled');
-		expect(target.snapshot().settings.aiEnabled).toBe(true);
+		expect(report.errors.join('\n')).toContain('settings.suggestionsEnabled');
+		expect(target.snapshot().settings.suggestionsEnabled).toBe(true);
 	});
 });
 
@@ -246,16 +383,24 @@ describe('sync between devices', () => {
 		await b.start();
 
 		net.online = false;
-		a.enqueue({ type: 'settings.update', aiEnabled: false });
-		expect(a.view!.settings.aiEnabled).toBe(false); // optimistic, while offline
+		a.enqueue({ type: 'settings.update', suggestionsEnabled: false });
+		a.enqueue({ type: 'settings.update', bulkAddEnabled: false });
+		expect(a.view!.settings.suggestionsEnabled).toBe(false); // optimistic, while offline
+		expect(a.view!.settings.bulkAddEnabled).toBe(false);
 		await a.flush();
-		expect(store.snapshot().settings.aiEnabled).toBe(true);
+		expect(store.snapshot().settings.suggestionsEnabled).toBe(true);
 
 		net.online = true;
 		await a.flush();
 		await b.refresh();
-		expect(store.snapshot().settings.aiEnabled).toBe(false);
-		expect(b.view!.settings.aiEnabled).toBe(false);
+		expect(store.snapshot().settings.suggestionsEnabled).toBe(false);
+		expect(b.view!.settings.suggestionsEnabled).toBe(false);
+		expect(b.view!.settings.bulkAddEnabled).toBe(false);
+		// Switching back on one device shows everything again on the other one.
+		b.enqueue({ type: 'settings.update', suggestionsEnabled: true, bulkAddEnabled: true });
+		await b.flush();
+		await a.refresh();
+		expect(a.view!.settings).toMatchObject({ suggestionsEnabled: true, bulkAddEnabled: true });
 		a.stop();
 		b.stop();
 	});

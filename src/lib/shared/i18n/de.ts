@@ -100,6 +100,7 @@ export const de: Messages = {
 		label: 'Hauptnavigation',
 		list: 'Liste',
 		suggestions: 'Vorschläge',
+		shortcuts: 'Schnellwahl',
 		history: 'Verlauf',
 		settings: 'Verwaltung',
 		suggestionCount: (n) => plural(n, 'Vorschlag', 'Vorschläge')
@@ -172,6 +173,7 @@ export const de: Messages = {
 		serverRejected: (status) => `Foto abgelehnt (HTTP ${status}).`
 	},
 	addBar: {
+		firstLineOnly: 'Nur die erste Zeile wurde eingefügt: „Mehrere hinzufügen“ ist ausgeschaltet.',
 		placeholder: 'Was brauchen wir?',
 		add: 'Hinzufügen',
 		earlier: 'Frühere Produkte',
@@ -203,8 +205,11 @@ export const de: Messages = {
 		datasetReplaced:
 			'Die Daten wurden durch einen Import oder eine Wiederherstellung ersetzt. Deine Liste wurde aktualisiert.',
 		opFailed: 'Die Änderung konnte nicht verarbeitet werden.',
-		aiOn: 'KI-Funktionen sind auf allen Geräten an',
-		aiOff: 'KI-Funktionen auf allen Geräten ausgeblendet. Es wurde nichts gelöscht.',
+		suggestionsOn: 'Vorschläge sind auf allen Geräten an',
+		suggestionsOff: 'Vorschläge auf allen Geräten ausgeblendet. Es wurde nichts gelöscht.',
+		bulkAddOn: '„Mehrere hinzufügen“ ist auf allen Geräten an',
+		bulkAddOff:
+			'„Mehrere hinzufügen“ auf allen Geräten ausgeblendet. Ein Produkt hinzufügen geht weiterhin.',
 		languageChanged: (name) => `Sprache auf allen Geräten auf ${name} geändert`,
 		addedTo: (label, list) => `${label} zu ${list} hinzugefügt`,
 		backOnList: (label) => `${label} steht wieder auf der Liste`,
@@ -563,7 +568,9 @@ export const de: Messages = {
 	},
 	share: {
 		title: 'Teilen',
-		opening: 'Geteilter Text wird geöffnet…'
+		opening: 'Geteilter Text wird geöffnet…',
+		bulkOff:
+			'„Mehrere hinzufügen“ ist ausgeschaltet, daher wurde aus dem geteilten Text nichts hinzugefügt.'
 	},
 	suggestions: {
 		addTo: (list) => `Zu ${list} hinzufügen`,
@@ -651,9 +658,12 @@ export const de: Messages = {
 		language: 'Sprache',
 		languageHint:
 			'Für alle Geräte. Selbst eingegebene Namen von Produkten, Listen und Kategorien bleiben, wie sie sind.',
-		ai: 'KI-Funktionen anzeigen',
-		aiHint:
-			'KI-Vorschläge, KI-Datei importieren und der KI-Auftrag. Gilt für alle Geräte; Ausschalten blendet sie nur aus, es wird nichts gelöscht.',
+		suggestions: 'Vorschläge anzeigen',
+		suggestionsHint:
+			'„Vielleicht nötig“, KI-Vorschläge, KI-Datei importieren, der KI-Auftrag und die Vorschlagszahl. Beim Tippen siehst du weiterhin passende Produkte. Gilt für alle Geräte; Ausschalten blendet sie nur aus, Verlauf und Vorschläge bleiben erhalten.',
+		bulkAdd: '„Mehrere hinzufügen“ anzeigen',
+		bulkAddHint:
+			'Mehrere Produkte auf einmal eingeben, einfügen oder teilen. Ein Produkt hinzufügen geht immer. Gilt für alle Geräte.',
 		lists: 'Listen',
 		listsHelp: 'Jede Liste ist eigenständig. Tippe auf einen Namen, um ihn zu ändern.',
 		addList: 'Liste',
@@ -790,8 +800,10 @@ export const de: Messages = {
 		exportMissing: 'export.json fehlt in der Sicherung.',
 		invalidJson: 'Die Datei ist kein gültiges JSON.',
 		replaceNeedsList: 'Ein vollständiges Ersetzen braucht mindestens eine Liste.',
-		aiNotApplied:
-			'Die KI-Einstellung aus der Datei wurde nicht übernommen (nur bei „Alles ersetzen“).',
+		suggestionsNotApplied:
+			'Die Vorschlags-Einstellung aus der Datei wurde nicht übernommen (nur bei „Alles ersetzen“).',
+		bulkAddNotApplied:
+			'Die Einstellung „Mehrere hinzufügen“ aus der Datei wurde nicht übernommen (nur bei „Alles ersetzen“).',
 		languageNotApplied:
 			'Die Sprache aus der Datei wurde nicht übernommen (nur bei „Alles ersetzen“).',
 		csvUnclosed: 'Nicht geschlossenes Anführungszeichen in der CSV-Datei.',
@@ -799,8 +811,10 @@ export const de: Messages = {
 		failed: (detail) =>
 			`Der Import ist fehlgeschlagen und wurde vollständig zurückgesetzt: ${detail}`,
 		nothingChanged: 'Es wurde nichts geändert.',
-		aiSetting: (on, preview) =>
-			`KI-Funktionen ${preview ? 'werden ' : ''}${on ? 'eingeschaltet' : 'ausgeschaltet'} (Einstellung aus der Datei)`,
+		suggestionsSetting: (on, preview) =>
+			`Vorschläge ${preview ? 'werden ' : ''}${on ? 'angezeigt' : 'ausgeblendet'} (Einstellung aus der Datei)`,
+		bulkAddSetting: (on, preview) =>
+			`„Mehrere hinzufügen“ ${preview ? 'wird ' : ''}${on ? 'angezeigt' : 'ausgeblendet'} (Einstellung aus der Datei)`,
 		languageSetting: (name, preview) =>
 			`Sprache ${preview ? 'wird ' : ''}${name} (Einstellung aus der Datei)`,
 		photoSkipped: (id, detail) => `Foto ${id} wurde übersprungen: ${detail}`,

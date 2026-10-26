@@ -1,6 +1,8 @@
 <script lang="ts">
 	import Icon from './Icon.svelte';
 	import { app, type AddOutcome } from '$lib/client/app.svelte';
+	import { ui } from '$lib/client/ui.svelte';
+	import { toasts } from '$lib/client/toast.svelte';
 	import { autocomplete, type ProductView } from '$lib/shared/selectors';
 	import { parseEntry } from '$lib/shared/quantity';
 	import { m, qty } from '$lib/client/i18n';
@@ -87,6 +89,33 @@
 		}
 	}
 
+	/**
+	 * Pasting several lines opens the "Meerdere toevoegen" preview (nothing is added before it
+	 * is confirmed). While that feature is switched off only the first line is pasted, so a
+	 * paste never adds several products.
+	 */
+	function onpaste(e: ClipboardEvent) {
+		const pasted = e.clipboardData?.getData('text') ?? '';
+		const lines = pasted
+			.split(/\r?\n/)
+			.map((l) => l.trim())
+			.filter(Boolean);
+		if (lines.length < 2 || !input) return;
+		e.preventDefault();
+		if (app.bulkAddEnabled) {
+			ui.openSheet('bulk', { listId: app.listId, text: lines.join('\n') });
+			return;
+		}
+		input.setRangeText(
+			lines[0].slice(0, 90),
+			input.selectionStart ?? 0,
+			input.selectionEnd ?? 0,
+			'end'
+		);
+		text = input.value;
+		toasts.show(m.addBar.firstLineOnly);
+	}
+
 	function statusLabel(v: ProductView): string {
 		if (v.status === 'active') return m.addBar.onList;
 		const other = elsewhere(v);
@@ -126,6 +155,7 @@
 					if (document.activeElement !== input) focused = false;
 				}, 120)}
 			{onkeydown}
+			{onpaste}
 			data-testid="add-input"
 		/>
 		<button

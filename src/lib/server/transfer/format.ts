@@ -157,7 +157,10 @@ export interface ExportData {
 	productAliases: ExportAlias[];
 	bundles: ExportBundle[];
 	media: ExportMedia[];
-	/** Household settings (v1.3). Optional on import: absent keeps the current settings. */
+	/**
+	 * Household settings (v1.3; `suggestionsEnabled` and `bulkAddEnabled` since v1.5, before that
+	 * `aiEnabled`). Optional on import: absent keeps the current settings.
+	 */
 	settings?: Settings;
 }
 
@@ -910,9 +913,13 @@ export function parseExportFile(input: unknown, v = new Validator()): ImportData
 		const o = v.obj(data.settings, 'data.settings');
 		if (o) {
 			out.settings = {};
-			if (o.aiEnabled !== undefined) {
-				if (typeof o.aiEnabled === 'boolean') out.settings.aiEnabled = o.aiEnabled;
-				else v.error('settings.aiEnabled', vt.oneOf('true, false'));
+			// `aiEnabled` is the v1.3/v1.4 name of `suggestionsEnabled`; the new name wins.
+			for (const key of ['suggestionsEnabled', 'aiEnabled', 'bulkAddEnabled'] as const) {
+				const value = o[key];
+				if (value === undefined) continue;
+				if (typeof value !== 'boolean') v.error(`settings.${key}`, vt.oneOf('true, false'));
+				else if (key === 'bulkAddEnabled') out.settings.bulkAddEnabled = value;
+				else out.settings.suggestionsEnabled ??= value;
 			}
 			if (o.language !== undefined) {
 				if (isLanguage(o.language)) out.settings.language = o.language;

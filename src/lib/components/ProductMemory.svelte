@@ -176,7 +176,7 @@
 
 	<PhotoField {product} />
 
-	{#if snoozedUntil > app.now}
+	{#if app.suggestionsEnabled && snoozedUntil > app.now}
 		<div
 			class="flex items-center gap-2 rounded-2xl bg-surface-2 py-1 pr-1 pl-4"
 			data-testid="snooze-info"

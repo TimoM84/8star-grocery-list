@@ -100,6 +100,7 @@ export const fr: Messages = {
 		label: 'Navigation principale',
 		list: 'Liste',
 		suggestions: 'Suggestions',
+		shortcuts: 'Raccourcis',
 		history: 'Historique',
 		settings: 'Gestion',
 		suggestionCount: (n) => plural(n, 'suggestion', 'suggestions')
@@ -171,6 +172,7 @@ export const fr: Messages = {
 		serverRejected: (status) => `Photo refusée (HTTP ${status}).`
 	},
 	addBar: {
+		firstLineOnly: 'Seule la première ligne a été collée : « Ajouter plusieurs » est désactivé.',
 		placeholder: 'De quoi a-t-on besoin ?',
 		add: 'Ajouter',
 		earlier: 'Produits précédents',
@@ -202,8 +204,11 @@ export const fr: Messages = {
 		datasetReplaced:
 			'Les données ont été remplacées par une importation ou une restauration. Votre liste a été mise à jour.',
 		opFailed: 'La modification n’a pas pu être traitée.',
-		aiOn: 'Les fonctions IA sont activées sur tous les appareils',
-		aiOff: 'Fonctions IA masquées sur tous les appareils. Rien n’a été supprimé.',
+		suggestionsOn: 'Les suggestions sont affichées sur tous les appareils',
+		suggestionsOff: 'Suggestions masquées sur tous les appareils. Rien n’a été supprimé.',
+		bulkAddOn: '« Ajouter plusieurs » est affiché sur tous les appareils',
+		bulkAddOff:
+			'« Ajouter plusieurs » masqué sur tous les appareils. Ajouter un produit fonctionne toujours.',
 		languageChanged: (name) => `Langue changée en ${name} sur tous les appareils`,
 		addedTo: (label, list) => `${label} ajouté à ${list}`,
 		backOnList: (label) => `${label} est de retour sur la liste`,
@@ -565,7 +570,8 @@ export const fr: Messages = {
 	},
 	share: {
 		title: 'Partager',
-		opening: 'Ouverture du texte partagé…'
+		opening: 'Ouverture du texte partagé…',
+		bulkOff: '« Ajouter plusieurs » est désactivé : rien n’a été ajouté depuis le texte partagé.'
 	},
 	suggestions: {
 		addTo: (list) => `Ajouter à ${list}`,
@@ -655,9 +661,12 @@ export const fr: Messages = {
 		language: 'Langue',
 		languageHint:
 			'Pour tous les appareils. Les noms de produits, de listes et de catégories que vous avez saisis restent tels quels.',
-		ai: 'Afficher les fonctions IA',
-		aiHint:
-			'Suggestions IA, import de fichier IA et consigne IA. S’applique à tous les appareils ; désactiver les masque seulement, rien n’est supprimé.',
+		suggestions: 'Afficher les suggestions',
+		suggestionsHint:
+			'« Peut-être nécessaire », suggestions IA, import de fichier IA, consigne IA et le badge de suggestions. La saisie propose toujours les produits correspondants. S’applique à tous les appareils ; désactiver les masque seulement, l’historique et les suggestions sont conservés.',
+		bulkAdd: 'Afficher « Ajouter plusieurs »',
+		bulkAddHint:
+			'Saisir, coller ou partager plusieurs produits à la fois. Ajouter un produit fonctionne toujours. S’applique à tous les appareils.',
 		lists: 'Listes',
 		listsHelp: 'Chaque liste est indépendante. Touchez un nom pour le renommer.',
 		addList: 'Liste',
@@ -797,14 +806,19 @@ export const fr: Messages = {
 		exportMissing: 'export.json manque dans la sauvegarde.',
 		invalidJson: 'Le fichier n’est pas un JSON valide.',
 		replaceNeedsList: 'Un remplacement complet nécessite au moins une liste.',
-		aiNotApplied: 'Le réglage IA du fichier n’a pas été repris (seulement en remplaçant tout).',
+		suggestionsNotApplied:
+			'Le réglage des suggestions du fichier n’a pas été repris (seulement en remplaçant tout).',
+		bulkAddNotApplied:
+			'Le réglage « Ajouter plusieurs » du fichier n’a pas été repris (seulement en remplaçant tout).',
 		languageNotApplied: 'La langue du fichier n’a pas été reprise (seulement en remplaçant tout).',
 		csvUnclosed: 'Guillemet non fermé dans le fichier CSV.',
 		csvEmpty: 'Le fichier CSV est vide.',
 		failed: (detail) => `L’importation a échoué et a été entièrement annulée : ${detail}`,
 		nothingChanged: 'Rien n’a été modifié.',
-		aiSetting: (on, preview) =>
-			`Fonctions IA ${preview ? 'seront ' : ''}${on ? 'activées' : 'désactivées'} (réglage du fichier)`,
+		suggestionsSetting: (on, preview) =>
+			`Suggestions ${preview ? 'seront ' : ''}${on ? 'affichées' : 'masquées'} (réglage du fichier)`,
+		bulkAddSetting: (on, preview) =>
+			`« Ajouter plusieurs » ${preview ? 'sera ' : ''}${on ? 'affiché' : 'masqué'} (réglage du fichier)`,
 		languageSetting: (name, preview) =>
 			`Langue ${preview ? 'sera ' : ''}${name} (réglage du fichier)`,
 		photoSkipped: (id, detail) => `Photo ${id} ignorée : ${detail}`,

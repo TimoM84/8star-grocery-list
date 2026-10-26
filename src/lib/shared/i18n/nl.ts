@@ -82,6 +82,7 @@ export const nl: Messages = {
 		label: 'Hoofdnavigatie',
 		list: 'Lijst',
 		suggestions: 'Suggesties',
+		shortcuts: 'Snelkeuze',
 		history: 'Historie',
 		settings: 'Beheer',
 		suggestionCount: (n) => `${n} suggesties`
@@ -153,6 +154,7 @@ export const nl: Messages = {
 		serverRejected: (status) => `Foto geweigerd (HTTP ${status}).`
 	},
 	addBar: {
+		firstLineOnly: 'Alleen de eerste regel is geplakt: “Meerdere toevoegen” staat uit.',
 		placeholder: 'Wat hebben we nodig?',
 		add: 'Toevoegen',
 		earlier: 'Eerdere producten',
@@ -184,8 +186,11 @@ export const nl: Messages = {
 		datasetReplaced:
 			'De gegevens zijn vervangen door een import of herstel. Je lijst is bijgewerkt.',
 		opFailed: 'Wijziging kon niet worden verwerkt.',
-		aiOn: 'AI-functies staan aan op alle apparaten',
-		aiOff: 'AI-functies verborgen op alle apparaten. Er is niets verwijderd.',
+		suggestionsOn: 'Suggesties staan aan op alle apparaten',
+		suggestionsOff: 'Suggesties verborgen op alle apparaten. Er is niets verwijderd.',
+		bulkAddOn: '“Meerdere toevoegen” staat aan op alle apparaten',
+		bulkAddOff:
+			'“Meerdere toevoegen” verborgen op alle apparaten. Eén product toevoegen werkt gewoon.',
 		languageChanged: (name) => `Taal op alle apparaten gewijzigd naar ${name}`,
 		addedTo: (label, list) => `${label} toegevoegd aan ${list}`,
 		backOnList: (label) => `${label} staat weer op de lijst`,
@@ -541,7 +546,8 @@ export const nl: Messages = {
 	},
 	share: {
 		title: 'Delen',
-		opening: 'Gedeelde tekst openen…'
+		opening: 'Gedeelde tekst openen…',
+		bulkOff: '“Meerdere toevoegen” staat uit, dus er is niets uit de gedeelde tekst toegevoegd.'
 	},
 	suggestions: {
 		addTo: (list) => `Toevoegen aan ${list}`,
@@ -629,9 +635,12 @@ export const nl: Messages = {
 		language: 'Taal',
 		languageHint:
 			'Voor alle apparaten. Namen van producten, lijsten en categorieën die jullie typten blijven zoals ze zijn.',
-		ai: 'AI-functies tonen',
-		aiHint:
-			'AI-suggesties, AI-bestand importeren en de AI-opdracht. Geldt voor alle apparaten; uitzetten verbergt ze alleen, er wordt niets verwijderd.',
+		suggestions: 'Suggesties tonen',
+		suggestionsHint:
+			'“Misschien nodig”, AI-suggesties, AI-bestand importeren, de AI-opdracht en het aantal bij Suggesties. Tijdens het typen zie je nog steeds passende producten. Geldt voor alle apparaten; uitzetten verbergt ze alleen, historie en suggesties blijven bewaard.',
+		bulkAdd: '“Meerdere toevoegen” tonen',
+		bulkAddHint:
+			'Meerdere producten tegelijk invoeren, plakken of delen. Eén product toevoegen werkt altijd. Geldt voor alle apparaten.',
 		lists: 'Lijsten',
 		listsHelp: 'Elke lijst is onafhankelijk. Tik op een naam om te hernoemen.',
 		addList: 'Lijst',
@@ -770,15 +779,19 @@ export const nl: Messages = {
 		exportMissing: 'export.json ontbreekt in de back-up.',
 		invalidJson: 'Het bestand is geen geldige JSON.',
 		replaceNeedsList: 'Een volledige vervanging heeft minstens één lijst nodig.',
-		aiNotApplied:
-			'De AI-instelling uit het bestand is niet overgenomen (alleen bij alles vervangen).',
+		suggestionsNotApplied:
+			'De suggestie-instelling uit het bestand is niet overgenomen (alleen bij alles vervangen).',
+		bulkAddNotApplied:
+			'De instelling “Meerdere toevoegen” uit het bestand is niet overgenomen (alleen bij alles vervangen).',
 		languageNotApplied: 'De taal uit het bestand is niet overgenomen (alleen bij alles vervangen).',
 		csvUnclosed: 'Onafgesloten aanhalingsteken in CSV-bestand.',
 		csvEmpty: 'Het CSV-bestand is leeg.',
 		failed: (detail: string) => `De import is mislukt en volledig teruggedraaid: ${detail}`,
 		nothingChanged: 'Er is niets gewijzigd.',
-		aiSetting: (on: boolean, preview: boolean) =>
-			`AI-functies ${preview ? 'worden ' : ''}${on ? 'aangezet' : 'uitgezet'} (instelling uit het bestand)`,
+		suggestionsSetting: (on: boolean, preview: boolean) =>
+			`Suggesties ${preview ? 'worden ' : ''}${on ? 'getoond' : 'verborgen'} (instelling uit het bestand)`,
+		bulkAddSetting: (on: boolean, preview: boolean) =>
+			`“Meerdere toevoegen” ${preview ? 'wordt ' : ''}${on ? 'getoond' : 'verborgen'} (instelling uit het bestand)`,
 		languageSetting: (name: string, preview: boolean) =>
 			`Taal ${preview ? 'wordt ' : ''}${name} (instelling uit het bestand)`,
 		photoSkipped: (id: string, detail: string) => `Foto ${id} is overgeslagen: ${detail}`,

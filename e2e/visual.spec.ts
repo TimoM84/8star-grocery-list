@@ -227,8 +227,12 @@ test('one-thumb reach: primary actions sit in comfortable zones on a 412px phone
 	await seed(page);
 	const nav = (await page.locator('nav[aria-label=Hoofdnavigatie]').boundingBox())!;
 	expect(nav.y + nav.height).toBeGreaterThan(915 - 100);
-	const firstRow = (await page.getByTestId('item-toggle').first().boundingBox())!;
+	const firstRow = (await page.getByTestId('item-row').first().boundingBox())!;
 	expect(firstRow.width).toBeGreaterThan(412 * 0.6);
-	expect(firstRow.height).toBeGreaterThanOrEqual(56);
+	// Only the circle ticks off: a full-height touch area of at least 56 × 56 at the left edge.
+	const circle = (await page.getByTestId('item-toggle').first().boundingBox())!;
+	expect(circle.width).toBeGreaterThanOrEqual(56);
+	expect(circle.height).toBeGreaterThanOrEqual(56);
+	expect(circle.x - firstRow.x).toBeLessThan(2);
 	await page.screenshot({ path: `${SHOT_DIR}/pixel-412-lijst.png` });
 });

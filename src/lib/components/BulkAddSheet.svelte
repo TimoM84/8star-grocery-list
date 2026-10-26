@@ -3,6 +3,7 @@
 	import CheckToggle from './CheckToggle.svelte';
 	import { app } from '$lib/client/app.svelte';
 	import { ui } from '$lib/client/ui.svelte';
+	import { toasts } from '$lib/client/toast.svelte';
 	import { MAX_BULK_LINES, parseBulk, planEntry, type EntryPlan } from '$lib/shared/planning';
 	import { parseEntry } from '$lib/shared/quantity';
 	import { m, qty } from '$lib/client/i18n';
@@ -25,8 +26,19 @@
 		choice: 'skip' | 'extra' | 'set';
 	}
 
-	const open = $derived(ui.isOpen('bulk'));
+	const requested = $derived(ui.isOpen('bulk'));
 	const data = $derived(ui.data<Data>('bulk') ?? {});
+	/**
+	 * Never shown while "Meerdere toevoegen" is switched off for the household, however it is
+	 * reached (shared text, back/forward, a device that switched it off meanwhile).
+	 */
+	const open = $derived(requested && !!app.view && app.bulkAddEnabled);
+
+	$effect(() => {
+		if (!requested || !app.view || app.bulkAddEnabled) return;
+		if (data.source === 'share') toasts.show(m.share.bulkOff);
+		ui.closeSheet();
+	});
 
 	let stage = $state<'input' | 'preview'>('input');
 	let text = $state('');
@@ -116,7 +128,7 @@
 	);
 
 	function submit() {
-		if (busy || blocking.length || !actionable.length) return;
+		if (busy || !app.bulkAddEnabled || blocking.length || !actionable.length) return;
 		busy = true; // guards against a double tap; the op itself is idempotent too
 		const ok = app.addMany(
 			listId,

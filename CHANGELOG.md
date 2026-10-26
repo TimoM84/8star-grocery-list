@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+Fewer distractions on request, and ticking off only happens where you mean it.
+
+### Added
+
+- **Meerdere toevoegen tonen** in Beheer → Functies (Settings → Features → **Show “Add
+  several”**), on by default. Off hides the **Meerdere** button on the list and in winkelstand.
+  A multi-line paste into the add field then only takes the first line, and text shared to the
+  app opens nothing and adds nothing (the app says so). Adding one product always works.
+  Household-wide like the language: `setting.bulkAddEnabled` in `meta` (no schema change),
+  live on every device through `settings.update`, works offline, and part of the JSON export
+  and backup (`data.settings.bulkAddEnabled`). Exports without it stay importable and keep the
+  current value.
+- With **Meerdere toevoegen** on, pasting several lines into the add field opens its preview
+  instead of gluing the lines into one name. Nothing is added before you confirm.
+
+### Changed
+
+- **AI-functies tonen is now Suggesties tonen** (Settings → Features → **Show suggestions**).
+  Off now hides every suggestion on all devices: **Misschien nodig** on the list and on the
+  Suggesties page, the predicted next purchase in the product details, AI suggestions, AI
+  import, the AI prompt and the badge count. The Suggesties tab is then called **Snelkeuze** and
+  keeps bundles, stock and favourites. Autocomplete while typing keeps working. Switching off
+  only hides: history, snoozes and imported suggestions are kept. A household that had AI
+  switched off has suggestions switched off after upgrading; `aiEnabled` in older exports,
+  cached snapshots and ops from not yet updated phones is read as the new setting
+  (`suggestionsEnabled`, sync protocol 5).
+- **Only the circle ticks off.** Tapping the product row, its name or quantity no longer ticks
+  an item off or puts it back; it opens the editor (in winkelstand: the actions), like the
+  pencil. The circle is larger and clearer, with a touch area of at least 48 × 48 CSS px
+  (56 × 56 by default) that does not overlap the other buttons, the same on grocery lists,
+  checklists and winkelstand. A quick double tap ticks off once instead of undoing itself.
+  Labels, keyboard use (Tab, Space/Enter) and the focus ring are kept.
+
 ## 1.4.0
 
 The app speaks five languages, and publishing a release is one button.
