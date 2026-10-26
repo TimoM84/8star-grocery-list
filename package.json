@@ -3,6 +3,8 @@
 	"version": "1.4.0",
 	"private": true,
 	"description": "Self-hosted, offline-first grocery list PWA with realtime sync for private networks.",
+	"license": "MIT",
+	"author": "Timo Manders",
 	"type": "module",
 	"engines": {
 		"node": ">=22.12"

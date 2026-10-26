@@ -306,4 +306,4 @@ installed PWA served over HTTPS on Android.
 
 ## License
 
-Private project. All rights reserved.
+[MIT](LICENSE) © 2026 Timo Manders. Third-party dependencies keep their own licenses.
